@@ -2,7 +2,6 @@
 
 import React from "react";
 import { Gauge, Calendar, Wrench } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useServiceContext } from "@/context/ServiceContext";
 
 const OdometerCard = ({ mileage }: { mileage: number }) => (
