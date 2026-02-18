@@ -18,6 +18,7 @@ export default function AddRecordPage() {
         oilChange: false,
         filterChange: false,
         notes: "",
+        cost: "",
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -33,6 +34,7 @@ export default function AddRecordPage() {
             oilChange: formData.oilChange,
             filterChange: formData.filterChange,
             notes: formData.notes,
+            cost: formData.cost ? `Rs. ${formData.cost}` : undefined,
         });
 
         setSuccess(true);
@@ -123,6 +125,22 @@ export default function AddRecordPage() {
                             />
                             <span className="text-gray-200 group-hover:text-white transition-colors">Oil Filter Change</span>
                         </label>
+                    </div>
+
+                    {/* Cost Input */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                            <span className="text-cyan-400 font-bold">₹</span>
+                            Service Cost
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 2500"
+                            value={formData.cost}
+                            onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all font-mono"
+                        />
                     </div>
 
                     {/* Notes */}
