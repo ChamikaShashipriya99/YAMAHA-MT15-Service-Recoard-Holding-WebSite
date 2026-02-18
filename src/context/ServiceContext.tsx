@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export type ServiceRecord = {
     id: string;
@@ -30,62 +31,107 @@ const STORAGE_KEY = "mt15_service_records";
 
 export function ServiceProvider({ children }: { children: React.ReactNode }) {
     const [records, setRecords] = useState<ServiceRecord[]>([]);
+    const supabase = createClient();
 
-    // Load from LocalStorage on mount
-    useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            try {
-                setRecords(JSON.parse(saved));
-            } catch (e) {
-                console.error("Failed to parse service records", e);
-            }
-        } else {
-            // Initialize with some dummy data if empty for demo purposes
-            const initialData: ServiceRecord[] = [
-                { id: "1", date: "2023-12-15", mileage: 12000, oilChange: true, filterChange: true, notes: "Regular service", type: "General Service", cost: "₹2,500" },
-                { id: "2", date: "2023-08-10", mileage: 9000, oilChange: true, filterChange: false, notes: "Oil top-up", type: "Oil Change", cost: "₹800" },
-            ];
-            setRecords(initialData);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData));
+    const fetchRecords = async () => {
+        const { data, error } = await supabase
+            .from('service_records')
+            .select('*')
+            .order('date', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching records:', error);
+            return;
         }
-    }, []);
 
-    // Save to LocalStorage whenever records change
-    useEffect(() => {
-        if (records.length > 0) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        if (data) {
+            const mappedRecords: ServiceRecord[] = data.map((record: any) => ({
+                id: record.id,
+                date: record.date,
+                mileage: record.mileage,
+                oilChange: record.oil_change,
+                filterChange: record.filter_change,
+                notes: record.notes,
+                cost: record.cost,
+                type: record.type,
+            }));
+            setRecords(mappedRecords);
         }
-    }, [records]);
-
-    const addRecord = (newRecord: Omit<ServiceRecord, "id">) => {
-        const record: ServiceRecord = {
-            ...newRecord,
-            id: crypto.randomUUID(),
-            type: newRecord.oilChange && newRecord.filterChange ? "Full Service" : newRecord.oilChange ? "Oil Change" : "Maintenance",
-        };
-
-        // Prepend new record so it's first
-        setRecords((prev) => [record, ...prev]);
     };
 
-    const deleteRecord = (id: string) => {
+    // Load from Supabase on mount
+    useEffect(() => {
+        fetchRecords();
+    }, []);
+
+    const addRecord = async (newRecord: Omit<ServiceRecord, "id">) => {
+        const type = newRecord.oilChange && newRecord.filterChange ? "Full Service" : newRecord.oilChange ? "Oil Change" : "Maintenance";
+
+        const { data, error } = await supabase
+            .from('service_records')
+            .insert([
+                {
+                    date: newRecord.date,
+                    mileage: newRecord.mileage,
+                    oil_change: newRecord.oilChange,
+                    filter_change: newRecord.filterChange,
+                    notes: newRecord.notes,
+                    cost: newRecord.cost,
+                    type: type,
+                },
+            ])
+            .select();
+
+        if (error) {
+            console.error('Error adding record:', error);
+            return;
+        }
+
+        if (data) {
+            // Refresh list
+            fetchRecords();
+        }
+    };
+
+    const deleteRecord = async (id: string) => {
+        const { error } = await supabase
+            .from('service_records')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting record:', error);
+            return;
+        }
+
         setRecords((prev) => prev.filter((record) => record.id !== id));
     };
 
-    const updateRecord = (id: string, updatedRecord: Partial<ServiceRecord>) => {
-        setRecords((prev) =>
-            prev.map((record) =>
-                record.id === id ? { ...record, ...updatedRecord } : record
-            )
-        );
+    const updateRecord = async (id: string, updatedRecord: Partial<ServiceRecord>) => {
+        const updates: any = {};
+        if (updatedRecord.date !== undefined) updates.date = updatedRecord.date;
+        if (updatedRecord.mileage !== undefined) updates.mileage = updatedRecord.mileage;
+        if (updatedRecord.oilChange !== undefined) updates.oil_change = updatedRecord.oilChange;
+        if (updatedRecord.filterChange !== undefined) updates.filter_change = updatedRecord.filterChange;
+        if (updatedRecord.notes !== undefined) updates.notes = updatedRecord.notes;
+        if (updatedRecord.cost !== undefined) updates.cost = updatedRecord.cost;
+        // recalculate type if necessary or pass it in. For now, we skip auto-recalc of 'type' on update unless passed explicitly
+
+        const { error } = await supabase
+            .from('service_records')
+            .update(updates)
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating record:', error);
+            return;
+        }
+
+        fetchRecords();
     };
 
     // Derived Statistics
-    // Assuming records are sorted by date descending (newest first) relative to how we add them
-    // But reliable calculation should sort first
     const sortedRecords = [...records].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
     const currentMileage = sortedRecords.length > 0 ? Math.max(...sortedRecords.map(r => r.mileage)) : 0;
     const nextServiceMileage = currentMileage + 3000;
     const serviceCount = records.length;
