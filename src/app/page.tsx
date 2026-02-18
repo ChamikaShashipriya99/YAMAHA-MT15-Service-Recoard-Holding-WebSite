@@ -1,4 +1,4 @@
-import BikeViewer from "@/components/BikeViewer";
+import LogoViewer from "@/components/LogoViewer";
 import DashboardStats from "@/components/DashboardStats";
 import RecentActivity from "@/components/RecentActivity";
 
@@ -15,7 +15,7 @@ export default function Home() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
         {/* Left Column - 3D Viewer (7 Cols) */}
         <section className="lg:col-span-7 flex flex-col min-h-[400px]">
-          <BikeViewer />
+          <LogoViewer />
         </section>
 
         {/* Right Column - Stats & Activity (5 Cols) */}
