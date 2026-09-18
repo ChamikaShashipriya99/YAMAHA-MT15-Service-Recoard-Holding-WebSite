@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export type ServiceRecord = {
     id: string;
@@ -10,15 +9,15 @@ export type ServiceRecord = {
     oilChange: boolean;
     filterChange: boolean;
     notes: string;
-    cost?: string; // Optional field if we want to add cost later
-    type?: string; // Derived from checkboxes for display
+    cost?: string;
+    type?: string;
 };
 
 type ServiceContextType = {
     records: ServiceRecord[];
-    addRecord: (record: Omit<ServiceRecord, "id">) => void;
-    deleteRecord: (id: string) => void;
-    updateRecord: (id: string, updatedRecord: Partial<ServiceRecord>) => void;
+    addRecord: (record: Omit<ServiceRecord, "id">) => Promise<void>;
+    deleteRecord: (id: string) => Promise<void>;
+    updateRecord: (id: string, updatedRecord: Partial<ServiceRecord>) => Promise<void>;
     currentMileage: number;
     nextServiceMileage: number;
     serviceCount: number;
@@ -31,108 +30,164 @@ const STORAGE_KEY = "mt15_service_records";
 
 export function ServiceProvider({ children }: { children: React.ReactNode }) {
     const [records, setRecords] = useState<ServiceRecord[]>([]);
-    const supabase = createClient();
 
     const fetchRecords = async () => {
-        const { data, error } = await supabase
-            .from('service_records')
-            .select('*')
-            .order('date', { ascending: false });
+        try {
+            const res = await fetch("/api/records");
+            const result = await res.json();
 
-        if (error) {
-            console.error('Error fetching records:', error);
-            return;
-        }
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || `HTTP error ${res.status}`);
+            }
 
-        if (data) {
-            const mappedRecords: ServiceRecord[] = data.map((record: any) => ({
-                id: record.id,
-                date: record.date,
-                mileage: record.mileage,
-                oilChange: record.oil_change,
-                filterChange: record.filter_change,
-                notes: record.notes,
-                cost: record.cost,
-                type: record.type,
-            }));
-            setRecords(mappedRecords);
+            if (result.data) {
+                const mappedRecords: ServiceRecord[] = result.data.map((record: any) => ({
+                    id: record.id || record._id,
+                    date: record.date,
+                    mileage: record.mileage,
+                    oilChange: Boolean(record.oilChange),
+                    filterChange: Boolean(record.filterChange),
+                    notes: record.notes || "",
+                    cost: record.cost || "",
+                    type: record.type || "Maintenance",
+                }));
+                setRecords(mappedRecords);
+
+                if (typeof window !== "undefined") {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(mappedRecords));
+                }
+            }
+        } catch (error: any) {
+            console.error("Error fetching records from API:", error.message || error);
+            // Fallback to local storage if API/database is unreachable
+            if (typeof window !== "undefined") {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    try {
+                        setRecords(JSON.parse(saved));
+                    } catch (e) {
+                        console.error("Failed to parse cached records:", e);
+                    }
+                }
+            }
         }
     };
 
-    // Load from Supabase on mount
+    // Load records on mount
     useEffect(() => {
         fetchRecords();
     }, []);
 
     const addRecord = async (newRecord: Omit<ServiceRecord, "id">) => {
-        const type = newRecord.oilChange && newRecord.filterChange ? "Full Service" : newRecord.oilChange ? "Oil Change" : "Maintenance";
+        const type =
+            newRecord.oilChange && newRecord.filterChange
+                ? "Full Service"
+                : newRecord.oilChange
+                ? "Oil Change"
+                : "Maintenance";
 
-        const { data, error } = await supabase
-            .from('service_records')
-            .insert([
-                {
-                    date: newRecord.date,
-                    mileage: newRecord.mileage,
-                    oil_change: newRecord.oilChange,
-                    filter_change: newRecord.filterChange,
-                    notes: newRecord.notes,
-                    cost: newRecord.cost,
-                    type: type,
-                },
-            ])
-            .select();
+        const payload = {
+            ...newRecord,
+            type,
+        };
 
-        if (error) {
-            console.error('Error adding record:', error);
-            return;
-        }
+        try {
+            const res = await fetch("/api/records", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const result = await res.json();
 
-        if (data) {
-            // Refresh list
-            fetchRecords();
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || "Failed to add record");
+            }
+
+            // Refresh list from server
+            await fetchRecords();
+        } catch (error: any) {
+            console.error("Error adding record:", error.message || error);
+            // Fallback offline: prepend to local state and localStorage
+            const fallbackRecord: ServiceRecord = {
+                ...payload,
+                id: crypto.randomUUID(),
+            };
+            setRecords((prev) => {
+                const updated = [fallbackRecord, ...prev];
+                if (typeof window !== "undefined") {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                }
+                return updated;
+            });
         }
     };
 
     const deleteRecord = async (id: string) => {
-        const { error } = await supabase
-            .from('service_records')
-            .delete()
-            .eq('id', id);
+        try {
+            const res = await fetch(`/api/records/${id}`, {
+                method: "DELETE",
+            });
+            const result = await res.json();
 
-        if (error) {
-            console.error('Error deleting record:', error);
-            return;
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || "Failed to delete record");
+            }
+
+            setRecords((prev) => {
+                const updated = prev.filter((record) => record.id !== id);
+                if (typeof window !== "undefined") {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                }
+                return updated;
+            });
+        } catch (error: any) {
+            console.error("Error deleting record:", error.message || error);
+            // Fallback: delete locally
+            setRecords((prev) => {
+                const updated = prev.filter((record) => record.id !== id);
+                if (typeof window !== "undefined") {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                }
+                return updated;
+            });
         }
-
-        setRecords((prev) => prev.filter((record) => record.id !== id));
     };
 
     const updateRecord = async (id: string, updatedRecord: Partial<ServiceRecord>) => {
-        const updates: any = {};
-        if (updatedRecord.date !== undefined) updates.date = updatedRecord.date;
-        if (updatedRecord.mileage !== undefined) updates.mileage = updatedRecord.mileage;
-        if (updatedRecord.oilChange !== undefined) updates.oil_change = updatedRecord.oilChange;
-        if (updatedRecord.filterChange !== undefined) updates.filter_change = updatedRecord.filterChange;
-        if (updatedRecord.notes !== undefined) updates.notes = updatedRecord.notes;
-        if (updatedRecord.cost !== undefined) updates.cost = updatedRecord.cost;
-        // recalculate type if necessary or pass it in. For now, we skip auto-recalc of 'type' on update unless passed explicitly
+        try {
+            const res = await fetch(`/api/records/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatedRecord),
+            });
+            const result = await res.json();
 
-        const { error } = await supabase
-            .from('service_records')
-            .update(updates)
-            .eq('id', id);
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || "Failed to update record");
+            }
 
-        if (error) {
-            console.error('Error updating record:', error);
-            return;
+            await fetchRecords();
+        } catch (error: any) {
+            console.error("Error updating record:", error.message || error);
+            // Fallback: update locally
+            setRecords((prev) => {
+                const updated = prev.map((record) =>
+                    record.id === id ? { ...record, ...updatedRecord } : record
+                );
+                if (typeof window !== "undefined") {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                }
+                return updated;
+            });
         }
-
-        fetchRecords();
     };
 
     // Derived Statistics
-    const sortedRecords = [...records].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const currentMileage = sortedRecords.length > 0 ? Math.max(...sortedRecords.map(r => r.mileage)) : 0;
+    const sortedRecords = [...records].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    const currentMileage =
+        sortedRecords.length > 0 ? Math.max(...sortedRecords.map((r) => r.mileage)) : 0;
     const nextServiceMileage = currentMileage + 3000;
     const serviceCount = records.length;
     const lastServiceDate = sortedRecords.length > 0 ? sortedRecords[0].date : "N/A";
