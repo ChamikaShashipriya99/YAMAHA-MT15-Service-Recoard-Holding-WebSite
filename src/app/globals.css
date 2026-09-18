@@ -113,3 +113,27 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 240, 255, 0.6);
 }
+
+/* Security Guardian: Prevent text selection & element dragging across app */
+body, * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Allow text selection inside legitimate inputs & editable fields */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Security Guardian: Prevent raw direct webpage printing */
+@media print {
+  body {
+    display: none !important;
+  }
+}

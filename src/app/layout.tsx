@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import AddRecordModal from "@/components/AddRecordModal";
 import CockpitLoader from "@/components/CockpitLoader";
+import SecurityGuardian from "@/components/SecurityGuardian";
 import { ServiceProvider } from "@/context/ServiceContext";
 
 const inter = Inter({
@@ -38,6 +39,7 @@ export default function RootLayout({
         </div>
 
         <ServiceProvider>
+          <SecurityGuardian />
           <CockpitLoader />
           <Navbar />
           <AddRecordModal />

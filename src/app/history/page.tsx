@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useServiceContext, ServiceRecord } from "@/context/ServiceContext";
@@ -19,17 +19,38 @@ import {
     Gauge,
     Coins,
     RotateCcw,
+    Download,
+    ChevronDown,
+    FileSpreadsheet,
+    Printer,
+    Database,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ConfirmModal from "@/components/ConfirmModal";
+import { cn } from "@/lib/utils";
+import { exportToCSV, exportToJSON, exportToPDF } from "@/lib/exportUtils";
 
 export default function HistoryPage() {
     const router = useRouter();
-    const { records, deleteRecord, resetAllRecords, openAddModal } = useServiceContext();
+    const { records, deleteRecord, resetAllRecords, openAddModal, currentMileage } =
+        useServiceContext();
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [isExportOpen, setIsExportOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
+
+    const exportMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setIsExportOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const handleDeleteConfirm = async () => {
         if (deleteId) {
@@ -112,7 +133,97 @@ export default function HistoryPage() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Multi-Format Export Dropdown */}
+                    <div className="relative" ref={exportMenuRef}>
+                        <button
+                            onClick={() => setIsExportOpen(!isExportOpen)}
+                            disabled={records.length === 0}
+                            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/25 shadow-[0_0_15px_rgba(0,240,255,0.12)] hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                            title="Export telemetry records"
+                        >
+                            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>EXPORT REPORT</span>
+                            <ChevronDown
+                                className={cn(
+                                    "w-3 h-3 transition-transform duration-200",
+                                    isExportOpen && "rotate-180"
+                                )}
+                            />
+                        </button>
+
+                        <AnimatePresence>
+                            {isExportOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute right-0 mt-2 w-56 p-1.5 bg-[#090d18]/95 backdrop-blur-xl border border-cyan-500/30 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(0,240,255,0.15)] z-50 flex flex-col gap-1"
+                                >
+                                    <div className="px-3 py-1.5 border-b border-white/5 text-[9px] font-mono font-semibold tracking-wider text-gray-400 uppercase">
+                                        TELEMETRY EXPORT
+                                    </div>
+
+                                    {/* PDF Option */}
+                                    <button
+                                        onClick={() => {
+                                            setIsExportOpen(false);
+                                            exportToPDF(records, {
+                                                totalSpent,
+                                                currentMileage,
+                                                totalRecords: records.length,
+                                            });
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-gray-200 hover:text-white hover:bg-cyan-500/15 border border-transparent hover:border-cyan-500/30 transition-all text-left group"
+                                    >
+                                        <div className="p-1.5 rounded bg-rose-500/10 text-rose-400 group-hover:bg-rose-500/20">
+                                            <Printer className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-white">PDF Dossier</div>
+                                            <div className="text-[10px] text-gray-400">Printable service book</div>
+                                        </div>
+                                    </button>
+
+                                    {/* CSV Option */}
+                                    <button
+                                        onClick={() => {
+                                            setIsExportOpen(false);
+                                            exportToCSV(records);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-gray-200 hover:text-white hover:bg-cyan-500/15 border border-transparent hover:border-cyan-500/30 transition-all text-left group"
+                                    >
+                                        <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20">
+                                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-white">CSV Spreadsheet</div>
+                                            <div className="text-[10px] text-gray-400">Excel / Google Sheets</div>
+                                        </div>
+                                    </button>
+
+                                    {/* JSON Option */}
+                                    <button
+                                        onClick={() => {
+                                            setIsExportOpen(false);
+                                            exportToJSON(records);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-gray-200 hover:text-white hover:bg-cyan-500/15 border border-transparent hover:border-cyan-500/30 transition-all text-left group"
+                                    >
+                                        <div className="p-1.5 rounded bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20">
+                                            <Database className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-white">JSON Archive</div>
+                                            <div className="text-[10px] text-gray-400">Raw telemetry backup</div>
+                                        </div>
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
                     <button
                         onClick={() => setIsResetModalOpen(true)}
                         disabled={records.length === 0}
