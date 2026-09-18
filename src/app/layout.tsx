@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Rajdhani } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import AddRecordModal from "@/components/AddRecordModal";
 import CockpitLoader from "@/components/CockpitLoader";
 import SecurityGuardian from "@/components/SecurityGuardian";
+import PwaRegister from "@/components/PwaRegister";
 import { ServiceProvider } from "@/context/ServiceContext";
 
 const inter = Inter({
@@ -18,9 +19,33 @@ const rajdhani = Rajdhani({
   variable: "--font-rajdhani",
 });
 
+export const viewport: Viewport = {
+  themeColor: "#05070e",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
   title: "Yamaha MT-15 // Cockpit Telemetry",
   description: "The Dark Side of Japan - Digital Maintenance & Service Cockpit for Yamaha MT-15",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MT-15 Cockpit",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -39,6 +64,7 @@ export default function RootLayout({
         </div>
 
         <ServiceProvider>
+          <PwaRegister />
           <SecurityGuardian />
           <CockpitLoader />
           <Navbar />

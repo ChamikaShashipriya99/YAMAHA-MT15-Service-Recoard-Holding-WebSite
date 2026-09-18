@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
-import { AUTH_CONFIG, getTotpUri } from "@/lib/auth";
+import { AUTH_CONFIG, getTotpUri, getEffectiveCredentials } from "@/lib/auth";
 
 export async function GET() {
     try {
-        const secret = AUTH_CONFIG.totpSecret;
+        const creds = await getEffectiveCredentials();
+        const secret = creds.totpSecret;
         const uri = getTotpUri(secret);
 
         // Generate QR Code Data URL

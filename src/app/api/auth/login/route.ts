@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-    verifyCredentials,
-    verifyTotp,
+    verifyCredentialsAsync,
+    verifyTotpAsync,
     createSession,
     SESSION_COOKIE_NAME,
     AUTH_CONFIG,
@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 1. Verify Username & Password
-        const isCredentialsValid = verifyCredentials(username, password);
+        // 1. Verify Username & Password (against DB or env fallback)
+        const isCredentialsValid = await verifyCredentialsAsync(username, password);
         if (!isCredentialsValid) {
             return NextResponse.json(
                 { success: false, error: "Invalid username or password" },
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const isTotpValid = verifyTotp(totpCode);
+        const isTotpValid = await verifyTotpAsync(totpCode);
         if (!isTotpValid) {
             return NextResponse.json(
                 {

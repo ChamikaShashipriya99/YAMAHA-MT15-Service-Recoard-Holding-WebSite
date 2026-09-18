@@ -1,0 +1,55 @@
+const sharp = require('sharp');
+const fs = require('fs');
+
+const svgIcon = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0e172a"/>
+      <stop offset="100%" stop-color="#030509"/>
+    </radialGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="100%" stop-color="#0088ff"/>
+    </linearGradient>
+    <linearGradient id="roseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff2a5f"/>
+      <stop offset="100%" stop-color="#b80036"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="502" height="502" x="5" y="5" rx="107" fill="none" stroke="#00f0ff" stroke-width="6" stroke-opacity="0.5"/>
+  <rect width="478" height="478" x="17" y="17" rx="97" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.1"/>
+
+  <line x1="80" y1="256" x2="432" y2="256" stroke="#00f0ff" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="6,6"/>
+  <line x1="256" y1="80" x2="256" y2="432" stroke="#00f0ff" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="6,6"/>
+
+  <polygon points="256,92 284,120 228,120" fill="url(#roseGrad)"/>
+
+  <g>
+    <path d="M 95 305 L 95 195 L 140 250 L 185 195 L 185 305" fill="none" stroke="url(#cyanGrad)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 195 195 L 275 195 M 235 195 L 235 305" fill="none" stroke="url(#cyanGrad)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="285,258 312,246 306,264 279,276" fill="url(#roseGrad)"/>
+    <path d="M 330 220 L 350 195 L 350 305 M 330 305 L 370 305" fill="none" stroke="url(#cyanGrad)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 425 195 L 388 195 L 382 240 C 385 238 400 236 414 244 C 428 252 432 268 428 284 C 422 300 405 310 385 305" fill="none" stroke="url(#cyanGrad)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="136" y="360" width="240" height="34" rx="8" fill="#000000" fill-opacity="0.7" stroke="#00f0ff" stroke-width="1.5" stroke-opacity="0.4"/>
+  <text x="256" y="382" font-family="sans-serif" font-size="13" font-weight="bold" letter-spacing="4" fill="#00f0ff" text-anchor="middle">DARK SIDE OF JAPAN</text>
+
+  <path d="M 45 90 L 45 45 L 90 45" fill="none" stroke="#00f0ff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 467 90 L 467 45 L 422 45" fill="none" stroke="#00f0ff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 45 422 L 45 467 L 90 467" fill="none" stroke="#00f0ff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 467 422 L 467 467 L 422 467" fill="none" stroke="#00f0ff" stroke-width="4" stroke-linecap="round"/>
+</svg>`;
+
+async function run() {
+  const buf = Buffer.from(svgIcon);
+  fs.writeFileSync('public/icon.svg', buf);
+  await sharp(buf).resize(512, 512).png().toFile('public/icon-512.png');
+  await sharp(buf).resize(192, 192).png().toFile('public/icon-192.png');
+  await sharp(buf).resize(180, 180).png().toFile('public/apple-icon.png');
+  await sharp(buf).resize(32, 32).png().toFile('public/favicon.png');
+  console.log('SUCCESS');
+}
+run().catch(console.error);

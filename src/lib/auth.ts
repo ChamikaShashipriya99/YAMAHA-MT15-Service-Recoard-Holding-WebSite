@@ -1,5 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { generateURI, verifySync, generateSecret } from "otplib";
+import bcrypt from "bcryptjs";
+import { connectToDatabase } from "@/lib/mongodb";
+import UserSettings from "@/models/UserSettings";
 
 export const SESSION_COOKIE_NAME = "mt15_auth_session";
 
@@ -11,6 +14,27 @@ export const AUTH_CONFIG = {
     password: process.env.AUTH_PASSWORD || "Chamika020511",
     totpSecret: process.env.AUTH_TOTP_SECRET || "7D6VWDQDJWD24OAN5PI5LIBTSR46EPLW",
 };
+
+/**
+ * Retrieves the currently active credentials from MongoDB Atlas (falls back to .env)
+ */
+export async function getEffectiveCredentials() {
+    try {
+        await connectToDatabase();
+        const settings = await UserSettings.findOne({ username: AUTH_CONFIG.username });
+        return {
+            username: AUTH_CONFIG.username,
+            passwordHash: settings?.passwordHash || null,
+            totpSecret: settings?.totpSecret || AUTH_CONFIG.totpSecret,
+        };
+    } catch {
+        return {
+            username: AUTH_CONFIG.username,
+            passwordHash: null,
+            totpSecret: AUTH_CONFIG.totpSecret,
+        };
+    }
+}
 
 /**
  * Creates a signed JWT session token
@@ -36,7 +60,21 @@ export async function verifySession(token: string) {
 }
 
 /**
- * Verifies Username and Password
+ * Verifies Username and Password against database with .env fallback
+ */
+export async function verifyCredentialsAsync(username: string, password: string): Promise<boolean> {
+    if (username.trim().toLowerCase() !== AUTH_CONFIG.username.trim().toLowerCase()) {
+        return false;
+    }
+    const creds = await getEffectiveCredentials();
+    if (creds.passwordHash) {
+        return bcrypt.compareSync(password, creds.passwordHash);
+    }
+    return password === AUTH_CONFIG.password;
+}
+
+/**
+ * Synchronous credential verification fallback
  */
 export function verifyCredentials(username: string, password: string): boolean {
     return (
@@ -54,6 +92,14 @@ export function getTotpUri(secret: string = AUTH_CONFIG.totpSecret): string {
         label: AUTH_CONFIG.username,
         issuer: "Yamaha MT-15",
     });
+}
+
+/**
+ * Verifies TOTP against database-stored secret with .env fallback
+ */
+export async function verifyTotpAsync(token: string | number): Promise<boolean> {
+    const creds = await getEffectiveCredentials();
+    return verifyTotp(token, creds.totpSecret);
 }
 
 /**

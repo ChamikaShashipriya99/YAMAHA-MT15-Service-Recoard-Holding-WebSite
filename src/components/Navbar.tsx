@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Plus, Cpu, Activity, LogOut } from "lucide-react";
+import { Menu, X, Plus, Cpu, Activity, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServiceContext } from "@/context/ServiceContext";
+import SettingsModal from "@/components/SettingsModal";
 
 const navLinks = [
     { name: "COCKPIT", href: "/" },
@@ -15,6 +16,7 @@ const navLinks = [
 
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { openAddModal } = useServiceContext();
@@ -106,6 +108,17 @@ export default function Navbar() {
                     </motion.button>
 
                     <motion.button
+                        onClick={() => setIsSettingsOpen(true)}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        title="Cockpit Settings & Diagnostics"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-semibold tracking-wider text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 hover:bg-cyan-500/20 hover:border-cyan-500/40 hover:text-white transition-all shadow-[0_0_12px_rgba(0,240,255,0.12)]"
+                    >
+                        <Settings className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span className="hidden lg:inline">SETTINGS</span>
+                    </motion.button>
+
+                    <motion.button
                         onClick={handleLogout}
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.97 }}
@@ -173,6 +186,17 @@ export default function Navbar() {
                             <button
                                 onClick={() => {
                                     setIsOpen(false);
+                                    setIsSettingsOpen(true);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-mono font-bold tracking-wider text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 hover:bg-cyan-500/20 transition-all"
+                            >
+                                <Settings className="w-4 h-4 stroke-[2.5]" />
+                                <span>COCKPIT SETTINGS</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setIsOpen(false);
                                     handleLogout();
                                 }}
                                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-mono font-bold tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/25 hover:bg-rose-500/20 transition-all"
@@ -184,6 +208,9 @@ export default function Navbar() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Cockpit Settings Modal */}
+            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </div>
     );
 }

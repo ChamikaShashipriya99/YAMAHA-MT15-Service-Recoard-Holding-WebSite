@@ -17,7 +17,9 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith("/models") ||
         pathname === "/LoadingScreenMT15.mp4" ||
         pathname === "/favicon.ico" ||
-        pathname.match(/\.(png|jpg|jpeg|svg|webp|ico)$/)
+        pathname === "/manifest.json" ||
+        pathname === "/sw.js" ||
+        pathname.match(/\.(png|jpg|jpeg|svg|webp|ico|json)$/)
     ) {
         // If already logged in and trying to access /login, redirect to /
         if (pathname === "/login") {
