@@ -15,6 +15,7 @@ export type ServiceRecord = {
 
 type ServiceContextType = {
     records: ServiceRecord[];
+    isLoading: boolean;
     addRecord: (record: Omit<ServiceRecord, "id">) => Promise<void>;
     deleteRecord: (id: string) => Promise<void>;
     updateRecord: (id: string, updatedRecord: Partial<ServiceRecord>) => Promise<void>;
@@ -22,6 +23,9 @@ type ServiceContextType = {
     nextServiceMileage: number;
     serviceCount: number;
     lastServiceDate: string;
+    isAddModalOpen: boolean;
+    openAddModal: () => void;
+    closeAddModal: () => void;
 };
 
 const ServiceContext = createContext<ServiceContextType | undefined>(undefined);
@@ -30,6 +34,11 @@ const STORAGE_KEY = "mt15_service_records";
 
 export function ServiceProvider({ children }: { children: React.ReactNode }) {
     const [records, setRecords] = useState<ServiceRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+    const openAddModal = () => setIsAddModalOpen(true);
+    const closeAddModal = () => setIsAddModalOpen(false);
 
     const fetchRecords = async () => {
         try {
@@ -70,6 +79,11 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
                     }
                 }
             }
+        } finally {
+            // Smooth initialization delay on first load
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 600);
         }
     };
 
@@ -196,6 +210,7 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
         <ServiceContext.Provider
             value={{
                 records: sortedRecords,
+                isLoading,
                 addRecord,
                 deleteRecord,
                 updateRecord,
@@ -203,6 +218,9 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
                 nextServiceMileage,
                 serviceCount,
                 lastServiceDate,
+                isAddModalOpen,
+                openAddModal,
+                closeAddModal,
             }}
         >
             {children}
