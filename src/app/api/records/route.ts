@@ -62,3 +62,21 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
+// DELETE /api/records - Delete all service records (reset)
+export async function DELETE() {
+    try {
+        await connectToDatabase();
+        await ServiceRecordModel.deleteMany({});
+        return NextResponse.json({
+            success: true,
+            message: "All service records have been purged successfully.",
+        });
+    } catch (error: any) {
+        console.error("API DELETE /api/records error:", error);
+        return NextResponse.json(
+            { success: false, error: error.message || "Failed to reset records" },
+            { status: 500 }
+        );
+    }
+}

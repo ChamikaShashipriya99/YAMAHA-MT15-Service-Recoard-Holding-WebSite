@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export type ServiceRecord = {
     id: string;
@@ -19,6 +20,7 @@ type ServiceContextType = {
     addRecord: (record: Omit<ServiceRecord, "id">) => Promise<void>;
     deleteRecord: (id: string) => Promise<void>;
     updateRecord: (id: string, updatedRecord: Partial<ServiceRecord>) => Promise<void>;
+    resetAllRecords: () => Promise<void>;
     currentMileage: number;
     nextServiceMileage: number;
     serviceCount: number;
@@ -33,6 +35,7 @@ const ServiceContext = createContext<ServiceContextType | undefined>(undefined);
 const STORAGE_KEY = "mt15_service_records";
 
 export function ServiceProvider({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
     const [records, setRecords] = useState<ServiceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -41,8 +44,20 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
     const closeAddModal = () => setIsAddModalOpen(false);
 
     const fetchRecords = async () => {
+        if (pathname === "/login" || pathname === "/setup-2fa") {
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const res = await fetch("/api/records");
+
+            // If unauthenticated, skip without throwing console error
+            if (res.status === 401) {
+                setIsLoading(false);
+                return;
+            }
+
             const result = await res.json();
 
             if (!res.ok || !result.success) {
@@ -87,10 +102,12 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Load records on mount
+    // Load records on mount or when route changes to an authenticated page
     useEffect(() => {
-        fetchRecords();
-    }, []);
+        if (pathname !== "/login" && pathname !== "/setup-2fa") {
+            fetchRecords();
+        }
+    }, [pathname]);
 
     const addRecord = async (newRecord: Omit<ServiceRecord, "id">) => {
         const type =
@@ -196,6 +213,30 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const resetAllRecords = async () => {
+        try {
+            const res = await fetch("/api/records", {
+                method: "DELETE",
+            });
+            const result = await res.json();
+
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || "Failed to reset records");
+            }
+
+            setRecords([]);
+            if (typeof window !== "undefined") {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+        } catch (error: any) {
+            console.error("Error resetting records:", error.message || error);
+            setRecords([]);
+            if (typeof window !== "undefined") {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+        }
+    };
+
     // Derived Statistics
     const sortedRecords = [...records].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -214,6 +255,7 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
                 addRecord,
                 deleteRecord,
                 updateRecord,
+                resetAllRecords,
                 currentMileage,
                 nextServiceMileage,
                 serviceCount,

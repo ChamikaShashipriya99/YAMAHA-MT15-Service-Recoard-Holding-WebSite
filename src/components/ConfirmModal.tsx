@@ -10,6 +10,7 @@ interface ConfirmModalProps {
     onConfirm: () => void;
     title: string;
     message: string;
+    confirmText?: string;
 }
 
 export default function ConfirmModal({
@@ -18,6 +19,7 @@ export default function ConfirmModal({
     onConfirm,
     title,
     message,
+    confirmText = "PURGE RECORD",
 }: ConfirmModalProps) {
     return (
         <AnimatePresence>
@@ -78,7 +80,7 @@ export default function ConfirmModal({
                                 }}
                                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold tracking-wider transition-all shadow-[0_0_15px_rgba(255,42,95,0.4)]"
                             >
-                                PURGE RECORD
+                                {confirmText}
                             </button>
                         </div>
                     </motion.div>

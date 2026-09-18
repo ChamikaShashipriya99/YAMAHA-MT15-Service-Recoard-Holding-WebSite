@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal, FastForward } from "lucide-react";
 
 export default function CockpitLoader() {
+    const pathname = usePathname();
     const [progress, setProgress] = useState(0);
     const [bootStep, setBootStep] = useState(0);
     const [isFinished, setIsFinished] = useState(false);
@@ -48,6 +50,10 @@ export default function CockpitLoader() {
 
         return () => clearInterval(timer);
     }, [bootMessages.length]);
+
+    if (pathname === "/login" || pathname === "/setup-2fa") {
+        return null;
+    }
 
     const showLoader = !isFinished && !isDismissed;
 

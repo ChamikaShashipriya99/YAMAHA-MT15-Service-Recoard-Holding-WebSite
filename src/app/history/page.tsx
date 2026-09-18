@@ -18,14 +18,16 @@ import {
     Tag,
     Gauge,
     Coins,
+    RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ConfirmModal from "@/components/ConfirmModal";
 
 export default function HistoryPage() {
     const router = useRouter();
-    const { records, deleteRecord, openAddModal } = useServiceContext();
+    const { records, deleteRecord, resetAllRecords, openAddModal } = useServiceContext();
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
 
@@ -34,6 +36,11 @@ export default function HistoryPage() {
             await deleteRecord(deleteId);
             setDeleteId(null);
         }
+    };
+
+    const handleResetConfirm = async () => {
+        await resetAllRecords();
+        setIsResetModalOpen(false);
     };
 
     // Filter records by type and search query
@@ -77,6 +84,15 @@ export default function HistoryPage() {
                 message="This telemetry record will be permanently deleted from MongoDB Atlas and your cockpit statistics."
             />
 
+            <ConfirmModal
+                isOpen={isResetModalOpen}
+                onClose={() => setIsResetModalOpen(false)}
+                onConfirm={handleResetConfirm}
+                title="PURGE ALL TELEMETRY LOGS?"
+                message="WARNING: This will permanently wipe ALL recorded service history and telemetry metrics from MongoDB Atlas and local cache. This action cannot be reversed."
+                confirmText="PURGE ALL LOGS"
+            />
+
             {/* Header */}
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-white/5">
                 <div>
@@ -96,13 +112,25 @@ export default function HistoryPage() {
                     </p>
                 </div>
 
-                <button
-                    onClick={openAddModal}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold text-black bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_20px_rgba(0,240,255,0.35)] hover:shadow-[0_0_25px_rgba(0,240,255,0.5)] transition-all"
-                >
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>LOG NEW ENTRY</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsResetModalOpen(true)}
+                        disabled={records.length === 0}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/25 shadow-[0_0_15px_rgba(244,63,94,0.12)] hover:bg-rose-500/20 hover:border-rose-500/50 hover:text-rose-300 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                        title="Reset all recorded service logs"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>RESET ALL LOGS</span>
+                    </button>
+
+                    <button
+                        onClick={openAddModal}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold text-black bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_20px_rgba(0,240,255,0.35)] hover:shadow-[0_0_25px_rgba(0,240,255,0.5)] transition-all"
+                    >
+                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>LOG NEW ENTRY</span>
+                    </button>
+                </div>
             </header>
 
             {/* Telemetry Stats Strip */}

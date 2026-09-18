@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Plus, Cpu, Activity } from "lucide-react";
+import { Menu, X, Plus, Cpu, Activity, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServiceContext } from "@/context/ServiceContext";
 
@@ -16,11 +16,27 @@ const navLinks = [
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
+    const router = useRouter();
     const { openAddModal } = useServiceContext();
 
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
+
+    const handleLogout = async () => {
+        try {
+            await fetch("/api/auth/logout", { method: "POST" });
+        } catch (err) {
+            console.error("Logout error:", err);
+        } finally {
+            router.push("/login");
+            router.refresh();
+        }
+    };
+
+    if (pathname === "/login" || pathname === "/setup-2fa") {
+        return null;
+    }
 
     return (
         <div className="fixed top-4 inset-x-0 mx-auto w-full max-w-4xl z-50 px-4">
@@ -76,8 +92,8 @@ export default function Navbar() {
                     })}
                 </div>
 
-                {/* Log Service CTA Button */}
-                <div className="hidden md:flex items-center gap-3">
+                {/* Actions: Log Service CTA & Logout */}
+                <div className="hidden md:flex items-center gap-2.5">
                     <motion.button
                         onClick={openAddModal}
                         whileHover={{ scale: 1.03 }}
@@ -87,6 +103,17 @@ export default function Navbar() {
                         <Plus className="w-3.5 h-3.5 stroke-[3]" />
                         <span>LOG SERVICE</span>
                         <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                    </motion.button>
+
+                    <motion.button
+                        onClick={handleLogout}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        title="Disconnect & Lock Cockpit"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-semibold tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/25 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all shadow-[0_0_12px_rgba(244,63,94,0.15)]"
+                    >
+                        <LogOut className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span className="hidden lg:inline">LOGOUT</span>
                     </motion.button>
                 </div>
 
@@ -131,7 +158,7 @@ export default function Navbar() {
                             </Link>
                         ))}
 
-                        <div className="w-full pt-1">
+                        <div className="w-full pt-1 flex flex-col gap-2">
                             <button
                                 onClick={() => {
                                     setIsOpen(false);
@@ -141,6 +168,17 @@ export default function Navbar() {
                             >
                                 <Plus className="w-4 h-4 stroke-[3]" />
                                 <span>LOG SERVICE RECORD</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    handleLogout();
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-mono font-bold tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/25 hover:bg-rose-500/20 transition-all"
+                            >
+                                <LogOut className="w-4 h-4 stroke-[2.5]" />
+                                <span>DISCONNECT & LOGOUT</span>
                             </button>
                         </div>
                     </motion.div>
