@@ -3,12 +3,36 @@ import {
     verifyCredentialsAsync,
     verifyTotpAsync,
     createSession,
+    getEffectiveCredentials,
     SESSION_COOKIE_NAME,
     AUTH_CONFIG,
 } from "@/lib/auth";
+import { checkRateLimit, recordAttempt, resetRateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
     try {
+        const clientIp = getClientIp(request);
+        const rateLimitKey = `login_${clientIp}`;
+
+        // Check Rate Limit (5 attempts per 15 mins)
+        const rateCheck = checkRateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+        if (!rateCheck.allowed) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: `Too many failed login attempts. Terminal locked for security. Please try again in ${Math.ceil(
+                        rateCheck.retryAfterSeconds / 60
+                    )} minutes.`,
+                },
+                {
+                    status: 429,
+                    headers: {
+                        "Retry-After": String(rateCheck.retryAfterSeconds),
+                    },
+                }
+            );
+        }
+
         const body = await request.json();
         const { username, password, totpCode } = body;
 
@@ -22,6 +46,7 @@ export async function POST(request: NextRequest) {
         // 1. Verify Username & Password (against DB or env fallback)
         const isCredentialsValid = await verifyCredentialsAsync(username, password);
         if (!isCredentialsValid) {
+            recordAttempt(rateLimitKey, 15 * 60 * 1000);
             return NextResponse.json(
                 { success: false, error: "Invalid username or password" },
                 { status: 401 }
@@ -38,6 +63,7 @@ export async function POST(request: NextRequest) {
 
         const isTotpValid = await verifyTotpAsync(totpCode);
         if (!isTotpValid) {
+            recordAttempt(rateLimitKey, 15 * 60 * 1000);
             return NextResponse.json(
                 {
                     success: false,
@@ -47,10 +73,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 3. Create JWT Session
-        const token = await createSession(AUTH_CONFIG.username);
+        // Reset rate limit counter upon successful authentication
+        resetRateLimit(rateLimitKey);
 
-        // 4. Set Secure Session Cookie
+        // 3. Create JWT Session with current tokenVersion
+        const creds = await getEffectiveCredentials();
+        const token = await createSession(AUTH_CONFIG.username, creds.tokenVersion);
+
+        // 4. Set Secure Session Cookie with SameSite=strict
         const response = NextResponse.json({
             success: true,
             message: "Authentication successful",
@@ -62,7 +92,7 @@ export async function POST(request: NextRequest) {
             value: token,
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: "strict",
             path: "/",
             maxAge: 7 * 24 * 60 * 60, // 7 days
         });

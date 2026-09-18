@@ -4,6 +4,7 @@ export interface IUserSettings extends Document {
     username: string;
     passwordHash?: string;
     totpSecret?: string;
+    tokenVersion: number;
     updatedAt: Date;
 }
 
@@ -22,6 +23,10 @@ const UserSettingsSchema = new Schema<IUserSettings>(
         totpSecret: {
             type: String,
             default: null,
+        },
+        tokenVersion: {
+            type: Number,
+            default: 1,
         },
     },
     {

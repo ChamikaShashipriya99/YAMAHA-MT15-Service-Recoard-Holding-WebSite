@@ -9,6 +9,13 @@ export const SESSION_COOKIE_NAME = "mt15_auth_session";
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || "yamaha_mt15_super_secret_jwt_key_2026";
 const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 
+// Validate JWT secret strength in production
+if (process.env.NODE_ENV === "production") {
+    if (!process.env.AUTH_JWT_SECRET || process.env.AUTH_JWT_SECRET === "yamaha_mt15_super_secret_jwt_key_2026") {
+        console.warn("⚠️ SECURITY WARNING: Please set a strong, custom AUTH_JWT_SECRET in your production environment variables.");
+    }
+}
+
 export const AUTH_CONFIG = {
     username: process.env.AUTH_USERNAME || "Chamikaz99",
     password: process.env.AUTH_PASSWORD || "Chamika020511",
@@ -26,21 +33,23 @@ export async function getEffectiveCredentials() {
             username: AUTH_CONFIG.username,
             passwordHash: settings?.passwordHash || null,
             totpSecret: settings?.totpSecret || AUTH_CONFIG.totpSecret,
+            tokenVersion: settings?.tokenVersion ?? 1,
         };
     } catch {
         return {
             username: AUTH_CONFIG.username,
             passwordHash: null,
             totpSecret: AUTH_CONFIG.totpSecret,
+            tokenVersion: 1,
         };
     }
 }
 
 /**
- * Creates a signed JWT session token
+ * Creates a signed JWT session token with embedded tokenVersion for instant revocation
  */
-export async function createSession(username: string): Promise<string> {
-    return await new SignJWT({ username })
+export async function createSession(username: string, tokenVersion: number = 1): Promise<string> {
+    return await new SignJWT({ username, tokenVersion })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
         .setExpirationTime("7d")
@@ -48,15 +57,30 @@ export async function createSession(username: string): Promise<string> {
 }
 
 /**
- * Verifies a JWT session token
+ * Verifies a JWT session token and optionally validates against database tokenVersion
  */
-export async function verifySession(token: string) {
+export async function verifySession(token: string, checkDbVersion: boolean = false) {
     try {
         const { payload } = await jwtVerify(token, SECRET_KEY);
+        if (checkDbVersion && payload.username) {
+            const creds = await getEffectiveCredentials();
+            if (payload.tokenVersion !== undefined && payload.tokenVersion !== creds.tokenVersion) {
+                return null; // Token version mismatch -> session was revoked
+            }
+        }
         return payload;
     } catch {
         return null;
     }
+}
+
+/**
+ * Validates the session cookie on a request against MongoDB tokenVersion to enforce instant revocation
+ */
+export async function verifyRequestSession(request: { cookies: { get: (name: string) => { value: string } | undefined } }) {
+    const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (!token) return null;
+    return await verifySession(token, true);
 }
 
 /**

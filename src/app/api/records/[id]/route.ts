@@ -2,14 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
+import { validateDate, validateMileage, sanitizeText, sanitizeCost } from "@/lib/sanitize";
+import { verifyRequestSession } from "@/lib/auth";
 
 interface RouteParams {
     params: Promise<{ id: string }>;
 }
 
-// PUT /api/records/[id] - Update an existing record
+// PUT /api/records/[id] - Update an existing record with sanitization
 export async function PUT(request: NextRequest, { params }: RouteParams) {
     try {
+        const session = await verifyRequestSession(request);
+        if (!session) {
+            return NextResponse.json(
+                { success: false, error: "Unauthorized: Session expired or revoked." },
+                { status: 401 }
+            );
+        }
+
         const { id } = await params;
         await connectToDatabase();
 
@@ -23,13 +33,47 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         const body = await request.json();
         const updates: Record<string, any> = {};
 
-        if (body.date !== undefined) updates.date = body.date;
-        if (body.mileage !== undefined) updates.mileage = Number(body.mileage);
-        if (body.oilChange !== undefined) updates.oilChange = Boolean(body.oilChange);
-        if (body.filterChange !== undefined) updates.filterChange = Boolean(body.filterChange);
-        if (body.notes !== undefined) updates.notes = body.notes;
-        if (body.cost !== undefined) updates.cost = body.cost;
-        if (body.type !== undefined) updates.type = body.type;
+        if (body.date !== undefined) {
+            const dateCheck = validateDate(body.date);
+            if (!dateCheck.valid || !dateCheck.value) {
+                return NextResponse.json(
+                    { success: false, error: dateCheck.error || "Invalid date" },
+                    { status: 400 }
+                );
+            }
+            updates.date = dateCheck.value;
+        }
+
+        if (body.mileage !== undefined) {
+            const mileageCheck = validateMileage(body.mileage);
+            if (!mileageCheck.valid || mileageCheck.value === undefined) {
+                return NextResponse.json(
+                    { success: false, error: mileageCheck.error || "Invalid mileage" },
+                    { status: 400 }
+                );
+            }
+            updates.mileage = mileageCheck.value;
+        }
+
+        if (body.oilChange !== undefined) {
+            updates.oilChange = Boolean(body.oilChange);
+        }
+
+        if (body.filterChange !== undefined) {
+            updates.filterChange = Boolean(body.filterChange);
+        }
+
+        if (body.notes !== undefined) {
+            updates.notes = sanitizeText(body.notes, 500);
+        }
+
+        if (body.cost !== undefined) {
+            updates.cost = sanitizeCost(body.cost);
+        }
+
+        if (body.type !== undefined) {
+            updates.type = sanitizeText(body.type, 50);
+        }
 
         const updated = await ServiceRecordModel.findByIdAndUpdate(id, updates, {
             new: true,
@@ -54,8 +98,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/records/[id] - Delete an existing record
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
     try {
+        const session = await verifyRequestSession(request);
+        if (!session) {
+            return NextResponse.json(
+                { success: false, error: "Unauthorized: Session expired or revoked." },
+                { status: 401 }
+            );
+        }
+
         const { id } = await params;
         await connectToDatabase();
 

@@ -8,6 +8,29 @@ const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
+    // 0. CSRF Protection: Verify Origin on mutating requests (POST, PUT, DELETE, PATCH)
+    if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method)) {
+        const origin = request.headers.get("origin");
+        const host = request.headers.get("host");
+
+        if (origin) {
+            try {
+                const originUrl = new URL(origin);
+                if (originUrl.host !== host && originUrl.origin !== request.nextUrl.origin) {
+                    return NextResponse.json(
+                        { success: false, error: "Cross-site request blocked: Origin mismatch." },
+                        { status: 403 }
+                    );
+                }
+            } catch {
+                return NextResponse.json(
+                    { success: false, error: "Invalid Origin header." },
+                    { status: 403 }
+                );
+            }
+        }
+    }
+
     // 1. Allow public routes & assets
     if (
         pathname.startsWith("/login") ||
