@@ -28,6 +28,7 @@ type ServiceContextType = {
     isAddModalOpen: boolean;
     openAddModal: () => void;
     closeAddModal: () => void;
+    refreshRecords: () => Promise<void>;
 };
 
 const ServiceContext = createContext<ServiceContextType | undefined>(undefined);
@@ -263,6 +264,7 @@ export function ServiceProvider({ children }: { children: React.ReactNode }) {
                 isAddModalOpen,
                 openAddModal,
                 closeAddModal,
+                refreshRecords: fetchRecords,
             }}
         >
             {children}

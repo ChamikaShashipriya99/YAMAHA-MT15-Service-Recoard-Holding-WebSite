@@ -5,8 +5,10 @@ import Navbar from "@/components/Navbar";
 import AddRecordModal from "@/components/AddRecordModal";
 import CockpitLoader from "@/components/CockpitLoader";
 import SecurityGuardian from "@/components/SecurityGuardian";
+import InactivityLock from "@/components/InactivityLock";
 import PwaRegister from "@/components/PwaRegister";
 import { ServiceProvider } from "@/context/ServiceContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -54,25 +56,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${rajdhani.variable}`}>
+    <html lang="en" className={`${inter.variable} ${rajdhani.variable}`} data-theme="cyan-storm">
       <body className={`${inter.className} min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200 antialiased`}>
         {/* Ambient Cockpit Lights */}
         <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-          <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-cyan-500/10 blur-[130px] rounded-full" />
+          <div 
+            className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[350px] blur-[130px] rounded-full transition-all duration-700" 
+            style={{ backgroundColor: "var(--ambient-top)" }}
+          />
           <div className="absolute top-1/3 -right-40 w-[450px] h-[450px] bg-rose-500/8 blur-[140px] rounded-full" />
-          <div className="absolute bottom-10 left-[-100px] w-[500px] h-[350px] bg-cyan-600/8 blur-[150px] rounded-full" />
+          <div 
+            className="absolute bottom-10 left-[-100px] w-[500px] h-[350px] blur-[150px] rounded-full transition-all duration-700" 
+            style={{ backgroundColor: "var(--ambient-bottom)" }}
+          />
         </div>
 
-        <ServiceProvider>
-          <PwaRegister />
-          <SecurityGuardian />
-          <CockpitLoader />
-          <Navbar />
-          <AddRecordModal />
-          <main className="pt-24 pb-12 min-h-screen">
-            {children}
-          </main>
-        </ServiceProvider>
+        <ThemeProvider>
+          <ServiceProvider>
+            <PwaRegister />
+            <SecurityGuardian />
+            <InactivityLock />
+            <CockpitLoader />
+            <Navbar />
+            <AddRecordModal />
+            <main className="pt-24 pb-12 min-h-screen">
+              {children}
+            </main>
+          </ServiceProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

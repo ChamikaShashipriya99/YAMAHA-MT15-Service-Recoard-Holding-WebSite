@@ -3,13 +3,23 @@ import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
 import { validateDate, validateMileage, sanitizeText, sanitizeCost } from "@/lib/sanitize";
 import { verifyRequestSession } from "@/lib/auth";
+import { logSecurityEvent } from "@/lib/audit";
+import { encryptText, decryptText } from "@/lib/crypto";
 
-// GET /api/records - Retrieve all records ordered by date descending
+// GET /api/records - Retrieve all records ordered by date descending with decryption
 export async function GET() {
     try {
         await connectToDatabase();
-        const records = await ServiceRecordModel.find({}).sort({ date: -1 });
-        return NextResponse.json({ success: true, data: records });
+        const records = await ServiceRecordModel.find({}).sort({ date: -1 }).lean();
+
+        const decryptedRecords = records.map((rec: any) => ({
+            ...rec,
+            id: rec._id ? rec._id.toString() : rec.id,
+            notes: decryptText(rec.notes),
+            cost: decryptText(rec.cost),
+        }));
+
+        return NextResponse.json({ success: true, data: decryptedRecords });
     } catch (error: any) {
         console.error("API GET /api/records error:", error);
         return NextResponse.json(
@@ -66,18 +76,28 @@ export async function POST(request: NextRequest) {
                 ? "Oil Change"
                 : "Maintenance");
 
+        const encryptedNotes = encryptText(sanitizedNotes);
+        const encryptedCost = encryptText(sanitizedCost);
+
         const newRecord = await ServiceRecordModel.create({
             date: dateCheck.value,
             mileage: mileageCheck.value,
             oilChange: Boolean(oilChange),
             filterChange: Boolean(filterChange),
-            notes: sanitizedNotes,
-            cost: sanitizedCost,
+            notes: encryptedNotes,
+            cost: encryptedCost,
             type,
         });
 
+        // Return decrypted response for immediate UI update
+        const responseData = {
+            ...newRecord.toJSON(),
+            notes: sanitizedNotes,
+            cost: sanitizedCost,
+        };
+
         return NextResponse.json(
-            { success: true, data: newRecord },
+            { success: true, data: responseData },
             { status: 201 }
         );
     } catch (error: any) {
@@ -101,7 +121,16 @@ export async function DELETE(request: NextRequest) {
         }
 
         await connectToDatabase();
-        await ServiceRecordModel.deleteMany({});
+        const deleteResult = await ServiceRecordModel.deleteMany({});
+
+        // Log security audit event
+        await logSecurityEvent({
+            eventType: "RECORDS_PURGED",
+            status: "WARNING",
+            request,
+            details: `Atomic purge: deleted ${deleteResult.deletedCount} telemetry entries`,
+        });
+
         return NextResponse.json({
             success: true,
             message: "All service records have been purged successfully.",

@@ -12,8 +12,10 @@ import {
     createSession,
     SESSION_COOKIE_NAME,
     verifyRequestSession,
+    generateRecoveryCodes,
 } from "@/lib/auth";
-import { checkRateLimit, recordAttempt, resetRateLimit, getClientIp } from "@/lib/rateLimit";
+import { checkRateLimitAsync, recordAttemptAsync, resetRateLimitAsync, getClientIp } from "@/lib/rateLimit";
+import { logSecurityEvent } from "@/lib/audit";
 
 // GET /api/settings/2fa - Generate a new secret and QR code for pairing preview
 export async function GET(request: NextRequest) {
@@ -70,8 +72,8 @@ export async function POST(request: NextRequest) {
         const clientIp = getClientIp(request);
         const rateLimitKey = `2fa_change_${clientIp}`;
 
-        // Rate limit: 5 attempts per 15 minutes
-        const rateCheck = checkRateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+        // Rate limit: 5 attempts per 15 minutes (Persistent)
+        const rateCheck = await checkRateLimitAsync(rateLimitKey, 5, 15 * 60 * 1000);
         if (!rateCheck.allowed) {
             return NextResponse.json(
                 {
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
         // 1. Verify Current Password
         const isPasswordValid = await verifyCredentialsAsync(AUTH_CONFIG.username, currentPassword);
         if (!isPasswordValid) {
-            recordAttempt(rateLimitKey, 15 * 60 * 1000);
+            await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
             return NextResponse.json(
                 { success: false, error: "Current password is incorrect" },
                 { status: 401 }
@@ -113,7 +115,7 @@ export async function POST(request: NextRequest) {
         // 2. Verify Confirmation Code with the NEW secret
         const isCodeValid = verifyTotp(confirmationCode, newSecret);
         if (!isCodeValid) {
-            recordAttempt(rateLimitKey, 15 * 60 * 1000);
+            await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
             return NextResponse.json(
                 {
                     success: false,
@@ -123,16 +125,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        resetRateLimit(rateLimitKey);
+        await resetRateLimitAsync(rateLimitKey);
 
-        // 3. Commit new secret to MongoDB UserSettings and increment tokenVersion to revoke old sessions
+        // 3. Commit new secret and newly generated emergency recovery codes to MongoDB UserSettings
         await connectToDatabase();
+        const { plainCodes, hashedCodes } = generateRecoveryCodes(8);
+
         const updatedUser = await UserSettings.findOneAndUpdate(
             { username: AUTH_CONFIG.username },
             {
                 $set: {
                     username: AUTH_CONFIG.username,
                     totpSecret: newSecret,
+                    recoveryCodes: hashedCodes,
                     updatedAt: new Date(),
                 },
                 $inc: { tokenVersion: 1 },
@@ -140,11 +145,20 @@ export async function POST(request: NextRequest) {
             { upsert: true, new: true }
         );
 
+        // Record security audit event
+        await logSecurityEvent({
+            eventType: "2FA_REPAIRED",
+            status: "SUCCESS",
+            request,
+            details: "Google Authenticator re-paired. 8 new emergency backup recovery codes generated.",
+        });
+
         // 4. Issue a refreshed session cookie with the new tokenVersion for this active session
         const newToken = await createSession(AUTH_CONFIG.username, updatedUser.tokenVersion);
         const response = NextResponse.json({
             success: true,
             message: "Google Authenticator re-paired successfully! All other active sessions have been revoked.",
+            recoveryCodes: plainCodes,
         });
 
         response.cookies.set({

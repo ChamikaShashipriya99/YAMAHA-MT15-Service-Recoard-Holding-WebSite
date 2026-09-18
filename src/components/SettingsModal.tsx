@@ -21,18 +21,27 @@ import {
     Lock,
     Server,
     Cpu,
+    ShieldAlert,
+    Terminal,
+    Download,
+    UploadCloud,
+    Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ImportBackupModal from "@/components/ImportBackupModal";
+import { useCockpitTheme } from "@/context/ThemeContext";
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-type TabType = "database" | "credentials" | "2fa";
+type TabType = "database" | "credentials" | "2fa" | "audit" | "themes";
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("database");
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const { theme, setTheme, themeConfig, availableThemes } = useCockpitTheme();
 
     // --- Tab 1: Database Status State ---
     const [dbStatus, setDbStatus] = useState<{
@@ -155,6 +164,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 throw new Error(data.error || "Failed to commit 2FA");
             }
             setTfaMessage({ type: "success", text: "Google Authenticator re-paired and saved!" });
+            if (data.recoveryCodes && Array.isArray(data.recoveryCodes)) {
+                setGeneratedRecoveryCodes(data.recoveryCodes);
+            }
             setTfaStep("idle");
             setNewTfaData(null);
             setTfaPassword("");
@@ -174,17 +186,71 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
     };
 
-    // Auto-ping when opening modal on database tab
+    // --- Tab 4: Audit & Threat Telemetry State ---
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+    const [generatedRecoveryCodes, setGeneratedRecoveryCodes] = useState<string[]>([]);
+    const [recoveryCopied, setRecoveryCopied] = useState(false);
+
+    const fetchAuditLogs = async () => {
+        setIsLoadingAudit(true);
+        try {
+            const res = await fetch("/api/settings/audit-logs");
+            const data = await res.json();
+            if (data.success) {
+                setAuditLogs(data.data || []);
+            }
+        } catch {
+            // fail-safe
+        } finally {
+            setIsLoadingAudit(false);
+        }
+    };
+
+    const copyRecoveryCodes = () => {
+        if (generatedRecoveryCodes.length > 0) {
+            navigator.clipboard.writeText(generatedRecoveryCodes.join("\n"));
+            setRecoveryCopied(true);
+            setTimeout(() => setRecoveryCopied(false), 2000);
+        }
+    };
+
+    const downloadRecoveryCodes = () => {
+        if (generatedRecoveryCodes.length === 0) return;
+        const text = `=====================================================
+YAMAHA MT-15 // EMERGENCY 2FA BACKUP RECOVERY CODES
+Date: ${new Date().toISOString()}
+User: Chamikaz99
+Keep these single-use codes secure and offline.
+=====================================================\n\n` +
+            generatedRecoveryCodes.map((c, i) => `[${i + 1}] ${c}`).join("\n");
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `yamaha_mt15_emergency_recovery_codes_${new Date().toISOString().slice(0, 10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    // Auto-ping when opening modal on database tab or audit tab
     useEffect(() => {
-        if (isOpen && activeTab === "database") {
-            pingDatabase();
+        if (isOpen) {
+            if (activeTab === "database") {
+                pingDatabase();
+            } else if (activeTab === "audit") {
+                fetchAuditLogs();
+            }
         }
     }, [isOpen, activeTab]);
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <>
+            <AnimatePresence>
+                {isOpen && (
+                    <div key="settings-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -233,11 +299,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
 
                         {/* Navigation Tabs */}
-                        <div className="flex border-b border-white/5 px-6 bg-black/20 gap-2">
+                        <div className="flex border-b border-white/5 px-6 bg-black/20 gap-2 overflow-x-auto">
                             <button
                                 onClick={() => setActiveTab("database")}
                                 className={cn(
-                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2",
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
                                     activeTab === "database"
                                         ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
                                         : "border-transparent text-gray-400 hover:text-white"
@@ -250,7 +316,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <button
                                 onClick={() => setActiveTab("credentials")}
                                 className={cn(
-                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2",
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
                                     activeTab === "credentials"
                                         ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
                                         : "border-transparent text-gray-400 hover:text-white"
@@ -263,7 +329,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <button
                                 onClick={() => setActiveTab("2fa")}
                                 className={cn(
-                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2",
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
                                     activeTab === "2fa"
                                         ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
                                         : "border-transparent text-gray-400 hover:text-white"
@@ -271,6 +337,32 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             >
                                 <Smartphone className="w-4 h-4" />
                                 <span>2FA AUTHENTICATOR</span>
+                            </button>
+
+                            <button
+                                onClick={() => setActiveTab("audit")}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
+                                    activeTab === "audit"
+                                        ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
+                                        : "border-transparent text-gray-400 hover:text-white"
+                                )}
+                            >
+                                <ShieldAlert className="w-4 h-4" />
+                                <span>THREAT TELEMETRY</span>
+                            </button>
+
+                            <button
+                                onClick={() => setActiveTab("themes")}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
+                                    activeTab === "themes"
+                                        ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
+                                        : "border-transparent text-gray-400 hover:text-white"
+                                )}
+                            >
+                                <Palette className="w-4 h-4" />
+                                <span>FACTORY THEMES</span>
                             </button>
                         </div>
 
@@ -362,6 +454,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                 {dbStatus?.serverUptimeSeconds ? `${Math.floor(dbStatus.serverUptimeSeconds / 60)} minutes` : "Active"}
                                             </span>
                                         </div>
+                                    </div>
+
+                                    {/* Disaster Recovery / Restore JSON Archive */}
+                                    <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-black/40 to-black/40 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                        <div>
+                                            <div className="flex items-center gap-2 text-amber-300 font-mono text-xs font-bold">
+                                                <UploadCloud className="w-4 h-4 text-amber-400" />
+                                                <span>DISASTER RECOVERY // RESTORE ARCHIVE</span>
+                                            </div>
+                                            <p className="text-[11px] font-mono text-gray-400 mt-0.5">
+                                                Restore telemetry records from an encrypted `.json` backup file.
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsImportModalOpen(true)}
+                                            className="px-4 py-2 rounded-xl text-xs font-mono font-bold text-black bg-amber-400 hover:bg-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)] flex items-center gap-1.5 transition-all shrink-0"
+                                        >
+                                            <UploadCloud className="w-3.5 h-3.5 stroke-[2.5]" />
+                                            <span>RESTORE JSON BACKUP</span>
+                                        </button>
                                     </div>
                                 </div>
                             )}
@@ -576,6 +690,247 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                             </div>
                                         </form>
                                     )}
+
+                                    {/* Generated Recovery Codes Display */}
+                                    {generatedRecoveryCodes.length > 0 && (
+                                        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2 text-amber-300 font-mono text-xs font-bold">
+                                                    <Shield className="w-4 h-4 text-amber-400" />
+                                                    <span>EMERGENCY 2FA RECOVERY CODES (SAVE NOW)</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={copyRecoveryCodes}
+                                                        className="px-2.5 py-1 rounded-lg text-[10px] font-mono text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 flex items-center gap-1 transition-colors"
+                                                    >
+                                                        {recoveryCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                        <span>{recoveryCopied ? "COPIED" : "COPY ALL"}</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={downloadRecoveryCodes}
+                                                        className="px-2.5 py-1 rounded-lg text-[10px] font-mono text-black font-bold bg-amber-400 hover:bg-amber-300 flex items-center gap-1 transition-colors"
+                                                    >
+                                                        <Download className="w-3 h-3" />
+                                                        <span>DOWNLOAD .TXT</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] font-mono text-gray-300">
+                                                If you ever lose access to your phone or Google Authenticator, each code below can be used exactly once to bypass 2FA at login:
+                                            </p>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {generatedRecoveryCodes.map((code, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="px-2.5 py-1.5 rounded-lg bg-black/80 border border-amber-500/30 font-mono text-xs font-bold text-amber-300 text-center tracking-wider"
+                                                    >
+                                                        {code}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 4: THREAT TELEMETRY & AUDIT LOGS */}
+                            {activeTab === "audit" && (
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="text-[11px] font-mono tracking-widest text-cyan-400 uppercase font-semibold flex items-center gap-1.5">
+                                                <Terminal className="w-3.5 h-3.5" />
+                                                <span>SECURITY AUDIT TIMELINE // LAST 50 EVENTS</span>
+                                            </span>
+                                            <p className="text-[11px] font-mono text-gray-400 mt-0.5">
+                                                Persistent SIEM-ready security log with automated 90-day retention.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={fetchAuditLogs}
+                                            disabled={isLoadingAudit}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 disabled:opacity-50 transition-all"
+                                        >
+                                            <RefreshCw className={cn("w-3.5 h-3.5", isLoadingAudit && "animate-spin")} />
+                                            <span>REFRESH</span>
+                                        </button>
+                                    </div>
+
+                                    {isLoadingAudit && auditLogs.length === 0 ? (
+                                        <div className="py-12 text-center text-xs font-mono text-cyan-400/80 animate-pulse">
+                                            QUERYING SECURITY AUDIT LOGS...
+                                        </div>
+                                    ) : auditLogs.length === 0 ? (
+                                        <div className="py-12 text-center text-xs font-mono text-gray-500 border border-white/5 rounded-xl bg-black/40">
+                                            No security events logged yet.
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+                                            {auditLogs.map((log, index) => {
+                                                const isCritical = log.status === "CRITICAL";
+                                                const isWarning = log.status === "WARNING";
+                                                const badgeBg = isCritical
+                                                    ? "bg-rose-500/15 border-rose-500/30 text-rose-300"
+                                                    : isWarning
+                                                    ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                                                    : "bg-cyan-500/15 border-cyan-500/30 text-cyan-300";
+
+                                                return (
+                                                    <div
+                                                        key={log._id || index}
+                                                        className="p-3 rounded-xl bg-black/50 border border-white/5 hover:border-white/10 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                                                    >
+                                                        <div className="flex flex-col gap-1 min-w-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className={cn("px-2 py-0.5 rounded font-mono text-[10px] font-bold border", badgeBg)}>
+                                                                    {log.eventType}
+                                                                </span>
+                                                                <span className="text-[10px] font-mono text-gray-400">
+                                                                    IP: <span className="text-gray-200">{log.clientIp}</span>
+                                                                </span>
+                                                                {log.status && (
+                                                                    <span className={cn(
+                                                                        "text-[9px] font-mono uppercase px-1.5 py-0.2 rounded",
+                                                                        isCritical ? "text-rose-400" : isWarning ? "text-amber-400" : "text-emerald-400"
+                                                                    )}>
+                                                                        ● {log.status}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs font-mono text-gray-300 truncate">
+                                                                {log.details || "Telemetry event recorded"}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-[10px] font-mono text-gray-500 shrink-0 sm:text-right">
+                                                            {new Date(log.timestamp).toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 5: FACTORY COLORWAY THEMES */}
+                            {activeTab === "themes" && (
+                                <div className="flex flex-col gap-6">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-mono tracking-widest text-cyan-400 uppercase font-semibold">
+                                                    YAMAHA MT-15 FACTORY SHOWROOM
+                                                </span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                                Select the colorway that matches your motorcycle. All dials, glows, cards, and cockpit ambient lighting adapt instantaneously.
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 text-xs font-mono shrink-0">
+                                            <span className="text-gray-400">EQUIPPED:</span>
+                                            <span className="font-bold text-white uppercase">{themeConfig.name}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Colorway Grid */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {availableThemes.map((item) => {
+                                            const isCurrent = item.id === theme;
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    onClick={() => setTheme(item.id)}
+                                                    className={cn(
+                                                        "group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-4 overflow-hidden",
+                                                        isCurrent
+                                                            ? "bg-black/80 border-white/30 shadow-[0_0_25px_rgba(255,255,255,0.1)] ring-1 ring-white/20"
+                                                            : "bg-black/40 border-white/10 hover:border-white/25 hover:bg-black/60"
+                                                    )}
+                                                >
+                                                    {/* Glow accent corner */}
+                                                    <div
+                                                        className="absolute -top-12 -right-12 w-24 h-24 rounded-full blur-2xl pointer-events-none opacity-40 group-hover:opacity-80 transition-opacity"
+                                                        style={{ backgroundColor: item.primaryHex }}
+                                                    />
+
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-8 h-8 rounded-xl flex items-center justify-center border transition-transform group-hover:scale-110 shadow-lg shrink-0"
+                                                                style={{
+                                                                    backgroundColor: `${item.primaryHex}20`,
+                                                                    borderColor: `${item.primaryHex}60`,
+                                                                    boxShadow: `0 0 15px ${item.primaryHex}40`,
+                                                                }}
+                                                            >
+                                                                <span
+                                                                    className="w-3.5 h-3.5 rounded-full"
+                                                                    style={{ backgroundColor: item.primaryHex }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <h3 className="font-mono font-bold text-sm text-white">
+                                                                        {item.name}
+                                                                    </h3>
+                                                                    <span
+                                                                        className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold"
+                                                                        style={{
+                                                                            backgroundColor: `${item.primaryHex}25`,
+                                                                            color: item.primaryHex,
+                                                                        }}
+                                                                    >
+                                                                        {item.badge}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-[11px] font-mono text-gray-400">
+                                                                    {item.subname}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {isCurrent && (
+                                                            <div
+                                                                className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold text-black flex items-center gap-1 shrink-0"
+                                                                style={{ backgroundColor: item.primaryHex }}
+                                                            >
+                                                                <Check className="w-3 h-3 stroke-[3]" />
+                                                                <span>ACTIVE</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="text-xs text-gray-300 font-mono leading-relaxed">
+                                                        {item.description}
+                                                    </p>
+
+                                                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] font-mono">
+                                                        <span className="text-gray-400">
+                                                            Wheel Accent: <span className="text-gray-200">{item.wheelsColor}</span>
+                                                        </span>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setTheme(item.id);
+                                                            }}
+                                                            className={cn(
+                                                                "px-3 py-1 rounded-lg font-bold tracking-wider transition-all",
+                                                                isCurrent
+                                                                    ? "bg-white/10 text-white border border-white/20"
+                                                                    : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            {isCurrent ? "EQUIPPED" : "EQUIP THEME"}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -583,5 +938,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
             )}
         </AnimatePresence>
+
+        <ImportBackupModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+        />
+    </>
     );
 }

@@ -2,21 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import {
     verifyCredentialsAsync,
     verifyTotpAsync,
+    verifyAndConsumeRecoveryCode,
     createSession,
     getEffectiveCredentials,
     SESSION_COOKIE_NAME,
     AUTH_CONFIG,
 } from "@/lib/auth";
-import { checkRateLimit, recordAttempt, resetRateLimit, getClientIp } from "@/lib/rateLimit";
+import { checkRateLimitAsync, recordAttemptAsync, resetRateLimitAsync, getClientIp } from "@/lib/rateLimit";
+import { logSecurityEvent } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
     try {
         const clientIp = getClientIp(request);
         const rateLimitKey = `login_${clientIp}`;
 
-        // Check Rate Limit (5 attempts per 15 mins)
-        const rateCheck = checkRateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+        // Check Persistent Rate Limit (5 attempts per 15 mins)
+        const rateCheck = await checkRateLimitAsync(rateLimitKey, 5, 15 * 60 * 1000);
         if (!rateCheck.allowed) {
+            await logSecurityEvent({
+                eventType: "LOGIN_FAILED",
+                status: "CRITICAL",
+                request,
+                details: `Rate limit lockout triggered: locked for ${Math.ceil(
+                    rateCheck.retryAfterSeconds / 60
+                )} mins`,
+            });
+
             return NextResponse.json(
                 {
                     success: false,
@@ -34,7 +45,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { username, password, totpCode } = body;
+        const { username, password, totpCode, recoveryCode } = body;
 
         if (!username || !password) {
             return NextResponse.json(
@@ -46,45 +57,91 @@ export async function POST(request: NextRequest) {
         // 1. Verify Username & Password (against DB or env fallback)
         const isCredentialsValid = await verifyCredentialsAsync(username, password);
         if (!isCredentialsValid) {
-            recordAttempt(rateLimitKey, 15 * 60 * 1000);
+            await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
+            await logSecurityEvent({
+                eventType: "LOGIN_FAILED",
+                status: "WARNING",
+                request,
+                details: `Invalid password attempt for account '${username}'`,
+            });
+
             return NextResponse.json(
                 { success: false, error: "Invalid username or password" },
                 { status: 401 }
             );
         }
 
-        // 2. Verify 6-digit Google Authenticator code
-        if (!totpCode) {
-            return NextResponse.json(
-                { success: false, error: "Please enter the 6-digit code from Google Authenticator" },
-                { status: 400 }
-            );
-        }
+        // 2. Verify 2FA via Google Authenticator OR Emergency Recovery Code
+        let usedRecovery = false;
 
-        const isTotpValid = await verifyTotpAsync(totpCode);
-        if (!isTotpValid) {
-            recordAttempt(rateLimitKey, 15 * 60 * 1000);
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "Invalid 6-digit code. Please verify the current code in your Google Authenticator app.",
-                },
-                { status: 401 }
-            );
+        if (recoveryCode && recoveryCode.trim()) {
+            const isRecoveryValid = await verifyAndConsumeRecoveryCode(recoveryCode.trim());
+            if (!isRecoveryValid) {
+                await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
+                await logSecurityEvent({
+                    eventType: "LOGIN_FAILED",
+                    status: "WARNING",
+                    request,
+                    details: "Invalid or already-consumed emergency recovery code",
+                });
+
+                return NextResponse.json(
+                    { success: false, error: "Invalid or already used emergency recovery code" },
+                    { status: 401 }
+                );
+            }
+            usedRecovery = true;
+        } else {
+            if (!totpCode) {
+                return NextResponse.json(
+                    { success: false, error: "Please enter the 6-digit code from Google Authenticator" },
+                    { status: 400 }
+                );
+            }
+
+            const isTotpValid = await verifyTotpAsync(totpCode);
+            if (!isTotpValid) {
+                await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
+                await logSecurityEvent({
+                    eventType: "LOGIN_FAILED",
+                    status: "WARNING",
+                    request,
+                    details: "Invalid 6-digit Google Authenticator code attempt",
+                });
+
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Invalid 6-digit code. Please verify the current code in your Google Authenticator app.",
+                    },
+                    { status: 401 }
+                );
+            }
         }
 
         // Reset rate limit counter upon successful authentication
-        resetRateLimit(rateLimitKey);
+        await resetRateLimitAsync(rateLimitKey);
 
         // 3. Create JWT Session with current tokenVersion
         const creds = await getEffectiveCredentials();
         const token = await createSession(AUTH_CONFIG.username, creds.tokenVersion);
+
+        // Log successful login audit event
+        await logSecurityEvent({
+            eventType: usedRecovery ? "LOGIN_RECOVERY_USED" : "LOGIN_SUCCESS",
+            status: usedRecovery ? "WARNING" : "SUCCESS",
+            request,
+            details: usedRecovery
+                ? "Emergency recovery code consumed for login"
+                : "Cockpit session engaged via 2FA TOTP",
+        });
 
         // 4. Set Secure Session Cookie with SameSite=strict
         const response = NextResponse.json({
             success: true,
             message: "Authentication successful",
             user: { username: AUTH_CONFIG.username },
+            usedRecovery,
         });
 
         response.cookies.set({

@@ -3,15 +3,73 @@
 @theme {
   --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-rajdhani), ui-monospace, monospace;
+  --color-cyan-300: var(--neon-cyan-300);
+  --color-cyan-400: var(--neon-cyan-400);
+  --color-cyan-500: var(--neon-cyan-500);
+  --color-cyan-600: var(--neon-cyan-600);
 }
 
 :root {
+  --neon-cyan-300: #67e8f9;
+  --neon-cyan-400: #00f0ff;
+  --neon-cyan-500: #00f0ff;
+  --neon-cyan-600: #0891b2;
   --neon-cyan: #00f0ff;
   --neon-cyan-glow: rgba(0, 240, 255, 0.35);
   --neon-vermillion: #ff2a5f;
   --neon-vermillion-glow: rgba(255, 42, 95, 0.35);
   --bg-cockpit: #05070e;
   --surface-cockpit: rgba(10, 14, 26, 0.75);
+  --ambient-top: rgba(0, 240, 255, 0.1);
+  --ambient-bottom: rgba(8, 145, 178, 0.08);
+}
+
+/* MT-15 Factory Colorway 1: Cyan Storm (Default) */
+[data-theme="cyan-storm"] {
+  --neon-cyan-300: #67e8f9;
+  --neon-cyan-400: #00f0ff;
+  --neon-cyan-500: #00f0ff;
+  --neon-cyan-600: #0891b2;
+  --neon-cyan: #00f0ff;
+  --neon-cyan-glow: rgba(0, 240, 255, 0.35);
+  --ambient-top: rgba(0, 240, 255, 0.12);
+  --ambient-bottom: rgba(8, 145, 178, 0.08);
+}
+
+/* MT-15 Factory Colorway 2: Ice Fluo-Vermillion */
+[data-theme="ice-fluo"] {
+  --neon-cyan-300: #ff9078;
+  --neon-cyan-400: #ff5536;
+  --neon-cyan-500: #ff3b19;
+  --neon-cyan-600: #d92807;
+  --neon-cyan: #ff3b19;
+  --neon-cyan-glow: rgba(255, 59, 25, 0.45);
+  --ambient-top: rgba(255, 59, 25, 0.14);
+  --ambient-bottom: rgba(217, 40, 7, 0.09);
+}
+
+/* MT-15 Factory Colorway 3: Racing Blue */
+[data-theme="racing-blue"] {
+  --neon-cyan-300: #93c5fd;
+  --neon-cyan-400: #3b82f6;
+  --neon-cyan-500: #2563eb;
+  --neon-cyan-600: #1d4ed8;
+  --neon-cyan: #2563eb;
+  --neon-cyan-glow: rgba(37, 99, 235, 0.45);
+  --ambient-top: rgba(37, 99, 235, 0.14);
+  --ambient-bottom: rgba(29, 78, 216, 0.09);
+}
+
+/* MT-15 Factory Colorway 4: Monster Energy Stealth */
+[data-theme="monster-energy"] {
+  --neon-cyan-300: #86efac;
+  --neon-cyan-400: #4ade80;
+  --neon-cyan-500: #39ff14;
+  --neon-cyan-600: #16a34a;
+  --neon-cyan: #39ff14;
+  --neon-cyan-glow: rgba(57, 255, 20, 0.4);
+  --ambient-top: rgba(57, 255, 20, 0.13);
+  --ambient-bottom: rgba(22, 163, 74, 0.08);
 }
 
 body {
@@ -20,11 +78,12 @@ body {
   font-family: var(--font-sans);
   overflow-x: hidden;
   background-image: 
-    radial-gradient(circle at 50% -20%, rgba(0, 240, 255, 0.08), transparent 45%),
+    radial-gradient(circle at 50% -20%, var(--ambient-top), transparent 45%),
     radial-gradient(circle at 100% 60%, rgba(255, 42, 95, 0.05), transparent 40%),
     linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+  transition: background-image 0.5s ease;
 }
 
 /* Custom Cyber Cockpit Card */
@@ -32,14 +91,14 @@ body {
   background: rgba(8, 12, 22, 0.8);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 240, 255, 0.18);
+  border: 1px solid var(--neon-cyan-glow);
   position: relative;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .cyber-card:hover {
-  border-color: rgba(0, 240, 255, 0.45);
-  box-shadow: 0 0 25px rgba(0, 240, 255, 0.12), inset 0 0 15px rgba(0, 240, 255, 0.03);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 25px var(--neon-cyan-glow), inset 0 0 15px rgba(0, 0, 0, 0.2);
 }
 
 /* Vermillion Accent Card */
@@ -62,9 +121,10 @@ body {
   left: -1px;
   width: 8px;
   height: 8px;
-  border-top: 2px solid #00f0ff;
-  border-left: 2px solid #00f0ff;
+  border-top: 2px solid var(--neon-cyan);
+  border-left: 2px solid var(--neon-cyan);
   pointer-events: none;
+  transition: border-color 0.3s ease;
 }
 
 .cyber-corner-br {
@@ -73,14 +133,15 @@ body {
   right: -1px;
   width: 8px;
   height: 8px;
-  border-bottom: 2px solid #00f0ff;
-  border-right: 2px solid #00f0ff;
+  border-bottom: 2px solid var(--neon-cyan);
+  border-right: 2px solid var(--neon-cyan);
   pointer-events: none;
+  transition: border-color 0.3s ease;
 }
 
 /* Glow effects */
 .glow-cyan {
-  text-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+  text-shadow: 0 0 12px var(--neon-cyan-glow);
 }
 
 .glow-vermillion {
@@ -88,7 +149,7 @@ body {
 }
 
 .box-glow-cyan {
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 20px var(--neon-cyan-glow);
 }
 
 .box-glow-vermillion {
@@ -106,12 +167,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.25);
+  background: var(--neon-cyan-glow);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.6);
+  background: var(--neon-cyan);
 }
 
 /* Security Guardian: Prevent text selection & element dragging across app */

@@ -7,7 +7,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Plus, Cpu, Activity, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServiceContext } from "@/context/ServiceContext";
+import { useCockpitTheme } from "@/context/ThemeContext";
 import SettingsModal from "@/components/SettingsModal";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 
 const navLinks = [
     { name: "COCKPIT", href: "/" },
@@ -20,6 +22,7 @@ export default function Navbar() {
     const pathname = usePathname();
     const router = useRouter();
     const { openAddModal } = useServiceContext();
+    const { theme, setTheme, availableThemes } = useCockpitTheme();
 
     useEffect(() => {
         setIsOpen(false);
@@ -107,6 +110,8 @@ export default function Navbar() {
                         <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     </motion.button>
 
+                    <ThemeSwitcher />
+
                     <motion.button
                         onClick={() => setIsSettingsOpen(true)}
                         whileHover={{ scale: 1.03 }}
@@ -144,6 +149,7 @@ export default function Navbar() {
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
+                        key="mobile-nav-menu-dropdown"
                         initial={{ opacity: 0, y: -10, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.98 }}
@@ -170,6 +176,42 @@ export default function Navbar() {
                                 <Activity className="w-3.5 h-3.5 opacity-50" />
                             </Link>
                         ))}
+
+                        {/* Mobile Factory Colorway Switcher Row */}
+                        <div className="pt-2 pb-1 border-t border-white/5 flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-gray-400">
+                                <span>FACTORY COLORWAY</span>
+                                <span className="text-cyan-400 font-semibold">{theme.toUpperCase()}</span>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {availableThemes.map((item) => {
+                                    const isSelected = item.id === theme;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => setTheme(item.id)}
+                                            className={cn(
+                                                "flex flex-col items-center gap-1.5 p-2 rounded-xl text-center border transition-all",
+                                                isSelected
+                                                    ? "bg-white/10 border-white/30 shadow-[0_0_12px_rgba(255,255,255,0.1)]"
+                                                    : "border-white/5 bg-black/40 hover:bg-white/5"
+                                            )}
+                                        >
+                                            <span
+                                                className="w-3.5 h-3.5 rounded-full transition-transform"
+                                                style={{
+                                                    backgroundColor: item.primaryHex,
+                                                    boxShadow: isSelected ? `0 0 10px ${item.primaryHex}` : "none",
+                                                }}
+                                            />
+                                            <span className="text-[9px] font-mono font-semibold text-gray-300 truncate w-full">
+                                                {item.name.split(" ")[0]}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
                         <div className="w-full pt-1 flex flex-col gap-2">
                             <button

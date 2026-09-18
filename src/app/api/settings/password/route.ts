@@ -9,7 +9,8 @@ import {
     SESSION_COOKIE_NAME,
     verifyRequestSession,
 } from "@/lib/auth";
-import { checkRateLimit, recordAttempt, resetRateLimit, getClientIp } from "@/lib/rateLimit";
+import { checkRateLimitAsync, recordAttemptAsync, resetRateLimitAsync, getClientIp } from "@/lib/rateLimit";
+import { logSecurityEvent } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
     try {
@@ -24,8 +25,8 @@ export async function POST(request: NextRequest) {
         const clientIp = getClientIp(request);
         const rateLimitKey = `pwd_change_${clientIp}`;
 
-        // Rate limit: 5 attempts per 15 minutes
-        const rateCheck = checkRateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+        // Rate limit: 5 attempts per 15 minutes (Persistent)
+        const rateCheck = await checkRateLimitAsync(rateLimitKey, 5, 15 * 60 * 1000);
         if (!rateCheck.allowed) {
             return NextResponse.json(
                 {
@@ -61,14 +62,14 @@ export async function POST(request: NextRequest) {
         // 1. Verify Current Password
         const isCurrentValid = await verifyCredentialsAsync(AUTH_CONFIG.username, currentPassword);
         if (!isCurrentValid) {
-            recordAttempt(rateLimitKey, 15 * 60 * 1000);
+            await recordAttemptAsync(rateLimitKey, 15 * 60 * 1000);
             return NextResponse.json(
                 { success: false, error: "Current password is incorrect" },
                 { status: 401 }
             );
         }
 
-        resetRateLimit(rateLimitKey);
+        await resetRateLimitAsync(rateLimitKey);
 
         // 2. Hash New Password
         const salt = bcrypt.genSaltSync(10);
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest) {
 
         // 4. Issue a refreshed session cookie with the new tokenVersion for this active session
         const newToken = await createSession(AUTH_CONFIG.username, updatedUser.tokenVersion);
+
+        // Record security audit log
+        await logSecurityEvent({
+            eventType: "PASSWORD_CHANGED",
+            status: "SUCCESS",
+            request,
+            details: "Master password rotated. Session tokenVersion incremented.",
+        });
+
         const response = NextResponse.json({
             success: true,
             message: "Password updated successfully! All other active sessions have been revoked.",

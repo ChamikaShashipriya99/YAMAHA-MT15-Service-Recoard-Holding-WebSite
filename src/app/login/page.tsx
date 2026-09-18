@@ -22,6 +22,8 @@ export default function LoginPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [totpCode, setTotpCode] = useState("");
+    const [recoveryCode, setRecoveryCode] = useState("");
+    const [useRecoveryCode, setUseRecoveryCode] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +40,8 @@ export default function LoginPage() {
                 body: JSON.stringify({
                     username,
                     password,
-                    totpCode,
+                    totpCode: useRecoveryCode ? undefined : totpCode,
+                    recoveryCode: useRecoveryCode ? recoveryCode : undefined,
                 }),
             });
 
@@ -137,32 +140,71 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    {/* 2FA TOTP Code */}
-                    <div className="flex flex-col gap-1.5 mt-1">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-mono text-cyan-300 font-bold flex items-center gap-2">
-                                <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
-                                GOOGLE AUTHENTICATOR (6 DIGITS)
-                            </label>
-                            <Link
-                                href="/setup-2fa"
-                                className="text-[10px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
-                            >
-                                <Smartphone className="w-3 h-3" />
-                                <span>PAIR PHONE</span>
-                            </Link>
+                    {/* 2FA TOTP Code or Recovery Code */}
+                    {!useRecoveryCode ? (
+                        <div className="flex flex-col gap-1.5 mt-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-mono text-cyan-300 font-bold flex items-center gap-2">
+                                    <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+                                    GOOGLE AUTHENTICATOR (6 DIGITS)
+                                </label>
+                                <Link
+                                    href="/setup-2fa"
+                                    className="text-[10px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+                                >
+                                    <Smartphone className="w-3 h-3" />
+                                    <span>PAIR PHONE</span>
+                                </Link>
+                            </div>
+                            <input
+                                type="text"
+                                required
+                                maxLength={6}
+                                autoComplete="one-time-code"
+                                placeholder="000000"
+                                value={totpCode}
+                                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                                className="w-full px-3.5 py-3 text-center text-lg font-mono font-bold tracking-[0.3em] bg-black/80 border border-cyan-500/30 rounded-xl text-cyan-300 placeholder-gray-700 focus:outline-none focus:border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)] transition-all"
+                            />
+                            <div className="flex justify-end pt-0.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setUseRecoveryCode(true)}
+                                    className="text-[10px] font-mono text-gray-400 hover:text-amber-400 transition-colors"
+                                >
+                                    Lost phone? Use Emergency Recovery Code
+                                </button>
+                            </div>
                         </div>
-                        <input
-                            type="text"
-                            required
-                            maxLength={6}
-                            autoComplete="one-time-code"
-                            placeholder="000000"
-                            value={totpCode}
-                            onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
-                            className="w-full px-3.5 py-3 text-center text-lg font-mono font-bold tracking-[0.3em] bg-black/80 border border-cyan-500/30 rounded-xl text-cyan-300 placeholder-gray-700 focus:outline-none focus:border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)] transition-all"
-                        />
-                    </div>
+                    ) : (
+                        <div className="flex flex-col gap-1.5 mt-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-mono text-amber-300 font-bold flex items-center gap-2">
+                                    <Shield className="w-3.5 h-3.5 text-amber-400" />
+                                    EMERGENCY RECOVERY CODE
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setUseRecoveryCode(false)}
+                                    className="text-[10px] font-mono text-cyan-400 hover:underline"
+                                >
+                                    Use Google Authenticator
+                                </button>
+                            </div>
+                            <input
+                                type="text"
+                                required
+                                maxLength={10}
+                                placeholder="XXXX-XXXX"
+                                value={recoveryCode}
+                                onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
+                                className="w-full px-3.5 py-3 text-center text-base font-mono font-bold tracking-[0.2em] bg-black/80 border border-amber-500/40 rounded-xl text-amber-300 placeholder-gray-700 focus:outline-none focus:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)] transition-all uppercase"
+                            />
+                            <p className="text-[10px] font-mono text-amber-400/80">
+                                Single-use emergency backup key.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Submit Button */}
                     <div className="pt-3">

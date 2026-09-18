@@ -24,9 +24,11 @@ import {
     FileSpreadsheet,
     Printer,
     Database,
+    UploadCloud,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ConfirmModal from "@/components/ConfirmModal";
+import ImportBackupModal from "@/components/ImportBackupModal";
 import { cn } from "@/lib/utils";
 import { exportToCSV, exportToJSON, exportToPDF } from "@/lib/exportUtils";
 
@@ -36,6 +38,7 @@ export default function HistoryPage() {
         useServiceContext();
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedType, setSelectedType] = useState<string>("ALL");
@@ -112,6 +115,11 @@ export default function HistoryPage() {
                 title="PURGE ALL TELEMETRY LOGS?"
                 message="WARNING: This will permanently wipe ALL recorded service history and telemetry metrics from MongoDB Atlas and local cache. This action cannot be reversed."
                 confirmText="PURGE ALL LOGS"
+            />
+
+            <ImportBackupModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
             />
 
             {/* Header */}
@@ -223,6 +231,16 @@ export default function HistoryPage() {
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {/* Import Backup Button */}
+                    <button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.12)] hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-300 transition-all"
+                        title="Restore telemetry records from a JSON backup file"
+                    >
+                        <UploadCloud className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>IMPORT BACKUP</span>
+                    </button>
 
                     <button
                         onClick={() => setIsResetModalOpen(true)}

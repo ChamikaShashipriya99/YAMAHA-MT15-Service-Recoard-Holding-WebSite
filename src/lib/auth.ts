@@ -151,3 +151,63 @@ export function verifyTotp(token: string | number, secret: string = AUTH_CONFIG.
 export function createNewTotpSecret(): string {
     return generateSecret();
 }
+
+/**
+ * Generates single-use emergency backup recovery codes
+ */
+export function generateRecoveryCodes(count: number = 8): {
+    plainCodes: string[];
+    hashedCodes: { codeHash: string; used: boolean }[];
+} {
+    const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // Base32 without ambiguous characters
+    const plainCodes: string[] = [];
+    const hashedCodes: { codeHash: string; used: boolean }[] = [];
+
+    for (let i = 0; i < count; i++) {
+        let part1 = "";
+        let part2 = "";
+        for (let j = 0; j < 4; j++) {
+            part1 += chars[Math.floor(Math.random() * chars.length)];
+            part2 += chars[Math.floor(Math.random() * chars.length)];
+        }
+        const code = `${part1}-${part2}`;
+        plainCodes.push(code);
+
+        const salt = bcrypt.genSaltSync(10);
+        const codeHash = bcrypt.hashSync(code.replace(/[^A-Za-z0-9]/g, "").toUpperCase(), salt);
+        hashedCodes.push({ codeHash, used: false });
+    }
+
+    return { plainCodes, hashedCodes };
+}
+
+/**
+ * Verifies and atomically consumes a single-use emergency recovery code
+ */
+export async function verifyAndConsumeRecoveryCode(inputCode: string): Promise<boolean> {
+    if (!inputCode) return false;
+    const cleanCode = inputCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if (cleanCode.length < 6) return false;
+
+    try {
+        await connectToDatabase();
+        const user = await UserSettings.findOne({ username: AUTH_CONFIG.username });
+        if (!user || !user.recoveryCodes || user.recoveryCodes.length === 0) {
+            return false;
+        }
+
+        for (const entry of user.recoveryCodes) {
+            if (!entry.used && bcrypt.compareSync(cleanCode, entry.codeHash)) {
+                entry.used = true;
+                entry.usedAt = new Date();
+                await user.save();
+                return true;
+            }
+        }
+
+        return false;
+    } catch (error) {
+        console.error("Recovery code verification error:", error);
+        return false;
+    }
+}

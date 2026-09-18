@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
 import { validateDate, validateMileage, sanitizeText, sanitizeCost } from "@/lib/sanitize";
 import { verifyRequestSession } from "@/lib/auth";
+import { encryptText, decryptText } from "@/lib/crypto";
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -64,11 +65,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
 
         if (body.notes !== undefined) {
-            updates.notes = sanitizeText(body.notes, 500);
+            updates.notes = encryptText(sanitizeText(body.notes, 500));
         }
 
         if (body.cost !== undefined) {
-            updates.cost = sanitizeCost(body.cost);
+            updates.cost = encryptText(sanitizeCost(body.cost));
         }
 
         if (body.type !== undefined) {
@@ -87,7 +88,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             );
         }
 
-        return NextResponse.json({ success: true, data: updated });
+        const returnData = {
+            ...updated.toJSON(),
+            notes: decryptText(updated.notes),
+            cost: decryptText(updated.cost),
+        };
+
+        return NextResponse.json({ success: true, data: returnData });
     } catch (error: any) {
         console.error("API PUT /api/records/[id] error:", error);
         return NextResponse.json(
