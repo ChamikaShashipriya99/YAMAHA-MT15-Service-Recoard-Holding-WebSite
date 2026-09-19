@@ -1,5 +1,3 @@
-﻿"use client";
-
 export type NotificationMilestone = "30_DAYS" | "15_DAYS" | "5_DAYS" | "EXPIRED" | "NOMINAL";
 
 export type DocumentType = "insurance" | "revenueLicense" | "emissionTest";
