@@ -2,6 +2,7 @@ import { createWorker } from "tesseract.js";
 
 export interface ParsedDocumentData {
     rawText: string;
+    detectedDocType?: "insurance" | "revenue" | "emission";
     issueDate?: string; // YYYY-MM-DD
     expiryDate?: string; // YYYY-MM-DD
     status?: "PASS" | "FAIL" | "PENDING";
@@ -28,67 +29,87 @@ const MONTH_MAP: Record<string, string> = {
 };
 
 /**
- * Extracts all recognizable calendar dates from OCR text and converts to YYYY-MM-DD
+ * Pre-cleans common OCR digit confusions (e.g., letter 'O'/'o' for '0', 'l'/'I' for '1')
  */
-export function extractDatesFromText(text: string): Array<{ dateStr: string; raw: string; index: number }> {
+export function cleanOcrDateText(text: string): string {
+    let t = text;
+    // Replace 'O' or 'o' in year-like tokens: 2O25, 2O26, 202O
+    t = t.replace(/\b2[oO](2[0-9]|3[0-9])\b/g, (m, g1) => "20" + g1);
+    t = t.replace(/\b(20[2-3])[oO]\b/g, (m, g1) => g1 + "0");
+    // Replace 'O' or 'o' in month/day: O1..O9
+    t = t.replace(/([\/\-\.\s])[oO]([0-9])/g, (m, g1, g2) => g1 + "0" + g2);
+    t = t.replace(/([0-9])[oO]([\/\-\.\s])/g, (m, g1, g2) => g1 + "0" + g2);
+    // Replace letter l or I when in date context (e.g. I5/03/2025 or /0I/)
+    t = t.replace(/(^|[\/\-\.\s])[lI]([0-9])/g, (m, g1, g2) => g1 + "1" + g2);
+    t = t.replace(/([0-9])[lI]([\/\-\.\s])/g, (m, g1, g2) => g1 + "1" + g2);
+    return t;
+}
+
+/**
+ * Extracts all recognizable calendar dates from OCR text and converts to strict YYYY-MM-DD.
+ * Tolerant of whitespace around slashes/dashes/dots, 2-digit years, and text months.
+ */
+export function extractDatesFromText(rawText: string): Array<{ dateStr: string; raw: string; index: number }> {
+    const text = cleanOcrDateText(rawText);
     const results: Array<{ dateStr: string; raw: string; index: number }> = [];
 
-    // Pattern 1: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
-    const dmyRegex = /\b([0-3]?[0-9])[\/\-\.]([0-1]?[0-9])[\/\-\.](20[2-3][0-9])\b/g;
+    function addDate(y: string, m: string, d: string, raw: string, idx: number) {
+        let yearNum = parseInt(y, 10);
+        if (yearNum < 100) {
+            // 2-digit year: 20-40 => 2020-2040, 50-99 => 1950-1999
+            yearNum = yearNum >= 50 ? 1900 + yearNum : 2000 + yearNum;
+        }
+        const monthNum = parseInt(m, 10);
+        const dayNum = parseInt(d, 10);
+
+        if (yearNum >= 2000 && yearNum <= 2040 && monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31) {
+            const formatted = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+            results.push({ dateStr: formatted, raw: raw.trim(), index: idx });
+        }
+    }
+
+    // Pattern 1: DD / MM / YYYY or DD / MM / YY (with optional spaces around / - .)
+    const dmyRegex = /(?:^|[^\d])([0-3]?[0-9])\s*[\/\-\.]\s*([0-1]?[0-9])\s*[\/\-\.]\s*(20[2-3][0-9]|[2-3][0-9])(?!\d)/g;
     let match;
     while ((match = dmyRegex.exec(text)) !== null) {
-        const day = match[1].padStart(2, "0");
-        const month = match[2].padStart(2, "0");
-        const year = match[3];
-        if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
-            results.push({
-                dateStr: `${year}-${month}-${day}`,
-                raw: match[0],
-                index: match.index,
-            });
-        }
+        addDate(match[3], match[2], match[1], match[0], match.index);
     }
 
-    // Pattern 2: YYYY-MM-DD, YYYY/MM/DD
-    const ymdRegex = /\b(20[2-3][0-9])[\/\-\.]([0-1]?[0-9])[\/\-\.]([0-3]?[0-9])\b/g;
+    // Pattern 2: YYYY / MM / DD or YY / MM / DD
+    const ymdRegex = /(?:^|[^\d])(20[2-3][0-9]|[2-3][0-9])\s*[\/\-\.]\s*([0-1]?[0-9])\s*[\/\-\.]\s*([0-3]?[0-9])(?!\d)/g;
     while ((match = ymdRegex.exec(text)) !== null) {
-        const year = match[1];
-        const month = match[2].padStart(2, "0");
-        const day = match[3].padStart(2, "0");
-        if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
-            results.push({
-                dateStr: `${year}-${month}-${day}`,
-                raw: match[0],
-                index: match.index,
-            });
-        }
+        addDate(match[1], match[2], match[3], match[0], match.index);
     }
 
-    // Pattern 3: Textual months e.g. 15 March 2026 or 15-Mar-2026
-    const textMonthRegex = /\b([0-3]?[0-9])[\s\-\/]([A-Za-z]{3,9})[\s\-\/,]+(20[2-3][0-9])\b/g;
+    // Pattern 3: DD MMM YYYY or DD-MMM-YYYY or DD MMM YY
+    const textMonthRegex = /(?:^|[^\d])([0-3]?[0-9])\s*[\s\-\/\.]\s*([A-Za-z]{3,9})\s*[\s\-\/\.]\s*(20[2-3][0-9]|[2-3][0-9])(?!\d)/g;
     while ((match = textMonthRegex.exec(text)) !== null) {
-        const day = match[1].padStart(2, "0");
-        const monthName = match[2].toLowerCase();
-        const year = match[3];
-        const monthNum = MONTH_MAP[monthName];
-        if (monthNum && Number(day) >= 1 && Number(day) <= 31) {
-            results.push({
-                dateStr: `${year}-${monthNum}-${day}`,
-                raw: match[0],
-                index: match.index,
-            });
+        const mon = MONTH_MAP[match[2].toLowerCase()];
+        if (mon) {
+            addDate(match[3], mon, match[1], match[0], match.index);
         }
     }
 
-    // Filter out duplicates
-    const uniqueMap = new Map<string, { dateStr: string; raw: string; index: number }>();
+    // Pattern 4: MMM DD, YYYY or MMM DD YYYY
+    const monthFirstRegex = /([A-Za-z]{3,9})\s+([0-3]?[0-9])(?:st|nd|rd|th)?,?\s+(20[2-3][0-9]|[2-3][0-9])(?!\d)/g;
+    while ((match = monthFirstRegex.exec(text)) !== null) {
+        const mon = MONTH_MAP[match[1].toLowerCase()];
+        if (mon) {
+            addDate(match[3], mon, match[2], match[0], match.index);
+        }
+    }
+
+    // Deduplicate preserving order of appearance
+    const unique: Array<{ dateStr: string; raw: string; index: number }> = [];
+    const seen = new Set<string>();
     for (const item of results) {
-        if (!uniqueMap.has(item.dateStr)) {
-            uniqueMap.set(item.dateStr, item);
+        if (!seen.has(item.dateStr)) {
+            seen.add(item.dateStr);
+            unique.push(item);
         }
     }
 
-    return Array.from(uniqueMap.values());
+    return unique;
 }
 
 /**
@@ -107,21 +128,29 @@ export function parseDocumentIntelligence(
     let secondaryInfo: string | undefined;
     let status: "PASS" | "FAIL" | "PENDING" | undefined;
 
-    const lowerText = text.toLowerCase();
+    // Detect document type cross-reference
+    const isRevenue = /revenue|licence|provincial|motor traffic|western prov|southern prov|central prov|wayamba|sabaragamuwa|rl-|ds division|tax sticker/i.test(text);
+    const isInsurance = /insurance|policy|ceylinco|allianz|slic|fairfirst|cover note|hnb assurance|aia insurance|third party/i.test(text);
+    const isEmission = /emission|drivegreen|cleanco|laugfs|smoke|eco sri|exhaust|gas analyzer|idle rpm/i.test(text);
+
+    let detectedDocType: "insurance" | "revenue" | "emission" | undefined;
+    if (isRevenue && !isInsurance && !isEmission) detectedDocType = "revenue";
+    else if (isInsurance && !isRevenue && !isEmission) detectedDocType = "insurance";
+    else if (isEmission && !isInsurance && !isRevenue) detectedDocType = "emission";
 
     // 1. DATES CLASSIFICATION (Issue Date vs Expiry Due Date)
     if (dates.length >= 2) {
-        // Find proximity to "from", "issue", "start" vs "to", "expiry", "valid until"
+        // Find proximity to keywords
         let bestFrom: string | undefined;
         let bestTo: string | undefined;
 
         for (const d of dates) {
-            const windowStart = Math.max(0, d.index - 50);
+            const windowStart = Math.max(0, d.index - 60);
             const contextBefore = text.slice(windowStart, d.index).toLowerCase();
 
-            if (/from|period of|commencement|effective|issue|start|tested|test date/.test(contextBefore)) {
+            if (/from|period of|period|commencement|effective|issue|start|tested|test date|date of issue/.test(contextBefore)) {
                 bestFrom = d.dateStr;
-            } else if (/to|valid until|valid to|expiry|expires|till|expiration|due/.test(contextBefore)) {
+            } else if (/to|valid until|valid to|valid thru|expiry|expires|till|expiration|due|valid up to/.test(contextBefore)) {
                 bestTo = d.dateStr;
             }
         }
@@ -138,18 +167,20 @@ export function parseDocumentIntelligence(
     } else if (dates.length === 1) {
         // Single date found: determine if it's an expiry date or issue date
         const d = dates[0];
-        const contextBefore = text.slice(Math.max(0, d.index - 50), d.index).toLowerCase();
-        if (/expiry|expires|valid to|valid until|to\b/.test(contextBefore)) {
+        const contextBefore = text.slice(Math.max(0, d.index - 60), d.index).toLowerCase();
+        if (/expiry|expires|valid to|valid until|valid up to|till|due|to\b/.test(contextBefore)) {
             expiryDate = d.dateStr;
-            // Infer issue date as 1 year earlier for standard annual documents
+            // Infer issue date as 1 year earlier (+1 day for annual document cycle)
             const dt = new Date(d.dateStr);
             dt.setFullYear(dt.getFullYear() - 1);
+            dt.setDate(dt.getDate() + 1);
             issueDate = dt.toISOString().split("T")[0];
         } else {
             issueDate = d.dateStr;
-            // Infer expiry date as 1 year later
+            // Infer expiry date as 1 year later (-1 day for annual document cycle)
             const dt = new Date(d.dateStr);
             dt.setFullYear(dt.getFullYear() + 1);
+            dt.setDate(dt.getDate() - 1);
             expiryDate = dt.toISOString().split("T")[0];
         }
     }
@@ -216,6 +247,7 @@ export function parseDocumentIntelligence(
 
     return {
         rawText: text,
+        detectedDocType,
         issueDate,
         expiryDate,
         status,
@@ -227,31 +259,99 @@ export function parseDocumentIntelligence(
 }
 
 /**
- * Runs client-side Tesseract.js worker on an image file with real-time progress updates
+ * Runs OCR on an image file or base64 data URL with dual-engine reliability:
+ * 1. Attempts fast client-side WebAssembly OCR.
+ * 2. If client-side worker fails or extracts no dates, seamlessly falls back to server-side engine (/api/ocr)
+ *    which utilizes sharp image preprocessing and multi-angle orientation detection.
  */
 export async function scanDocumentWithOCR(
-    imageFile: File,
+    imageInput: File | string,
     docType: "insurance" | "revenue" | "emission",
     onProgress?: (progressPercent: number, statusText: string) => void
 ): Promise<ParsedDocumentData> {
-    onProgress?.(10, "Initializing OCR Engine...");
-
-    const worker = await createWorker("eng");
+    onProgress?.(10, "Initializing AI Vision Engine...");
 
     try {
-        onProgress?.(30, "Analyzing Document Structure & Text...");
+        // Attempt Client-Side OCR first
+        const worker = await createWorker("eng", 1, {
+            logger: (m) => {
+                if (m.status === "recognizing text") {
+                    const pct = Math.round(30 + (m.progress || 0) * 55);
+                    onProgress?.(pct, `Scanning Document (${Math.round((m.progress || 0) * 100)}%)...`);
+                }
+            },
+        });
 
-        const result = await worker.recognize(imageFile);
-        const text = result.data.text || "";
-        const confidence = result.data.confidence || 85;
+        try {
+            onProgress?.(30, "Analyzing Document Structure...");
+            const result = await worker.recognize(imageInput);
+            const text = result.data.text || "";
+            const confidence = result.data.confidence || 85;
 
-        onProgress?.(85, "Extracting Dates, Status & Policy Numbers...");
+            onProgress?.(90, "Extracting Dates, Status & Policy Numbers...");
+            const parsed = parseDocumentIntelligence(text, docType, confidence);
 
-        const parsed = parseDocumentIntelligence(text, docType, confidence);
+            // If client OCR found dates, return immediately.
+            // If zero dates found, trigger server AI vision fallback for advanced rotation & sharp contrast
+            if (parsed.issueDate || parsed.expiryDate) {
+                onProgress?.(100, "Extraction Complete!");
+                return parsed;
+            }
 
-        onProgress?.(100, "Extraction Complete!");
-        return parsed;
-    } finally {
-        await worker.terminate();
+            console.warn("Client OCR found 0 dates. Engaging Server AI Vision fallback...");
+            throw new Error("Client OCR found no dates; trying Server AI Vision with rotation");
+        } finally {
+            await worker.terminate();
+        }
+    } catch (clientErr) {
+        console.warn("Client-side OCR delegating to Server AI Vision fallback:", clientErr);
+        onProgress?.(45, "Engaging Server AI Vision...");
+
+        let dataUrl: string;
+        if (typeof imageInput === "string") {
+            dataUrl = imageInput;
+        } else {
+            // Convert file to base64 Data URL
+            dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageInput);
+            });
+        }
+
+        onProgress?.(65, "Server AI analyzing document...");
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s safety headroom
+
+        try {
+            const res = await fetch("/api/ocr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: dataUrl, docType }),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+            onProgress?.(85, "Processing document intelligence...");
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "Document scan failed on server");
+            }
+
+            onProgress?.(100, "Extraction Complete!");
+            return data.data;
+        } catch (fetchErr: any) {
+            clearTimeout(timeoutId);
+            console.warn("Server OCR fetch failed or timed out:", fetchErr);
+            // Return baseline safe object so UI completes smoothly without hanging
+            onProgress?.(100, "Scan finished");
+            return {
+                rawText: "",
+                confidence: 0,
+            };
+        }
     }
 }

@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
+import {
+    Calendar as CalendarIcon,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    X,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface CyberDatePickerProps {
@@ -47,18 +54,18 @@ export default function CyberDatePicker({
         }
     }, [value]);
 
-    // Close popover when clicking outside
+    // Close calendar on Escape key
     useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
                 setIsOpen(false);
             }
         };
         if (isOpen) {
-            document.addEventListener("mousedown", handleClickOutside);
+            window.addEventListener("keydown", handleKeyDown);
         }
         return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
+            window.removeEventListener("keydown", handleKeyDown);
         };
     }, [isOpen]);
 
@@ -79,6 +86,15 @@ export default function CyberDatePicker({
         } else {
             setViewMonth(viewMonth + 1);
         }
+    };
+
+    // Navigate years
+    const prevYear = () => {
+        setViewYear(viewYear - 1);
+    };
+
+    const nextYear = () => {
+        setViewYear(viewYear + 1);
     };
 
     const setToday = () => {
@@ -171,7 +187,7 @@ export default function CyberDatePicker({
 
             {/* Custom Trigger Input Field */}
             <div
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => setIsOpen(true)}
                 className={`w-full px-3.5 py-2.5 text-xs font-mono rounded-xl cursor-pointer select-none transition-all flex items-center justify-between border ${
                     isOpen
                         ? "bg-black/80 border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.25)] text-white"
@@ -200,129 +216,180 @@ export default function CyberDatePicker({
                 tabIndex={-1}
             />
 
-            {/* Custom Cyber Calendar Dropdown Popover */}
+            {/* Dedicated Cyber Calendar Dialog Overlay */}
             <AnimatePresence>
                 {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                        transition={{ duration: 0.2 }}
-                        className="absolute top-full left-0 mt-2 z-50 w-full sm:w-[340px] bg-[#070b14]/95 backdrop-blur-2xl border border-cyan-500/35 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.9),0_0_25px_rgba(0,240,255,0.2)] p-4"
+                    <div
+                        key="cyber-datepicker-modal"
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
                     >
-                        {/* Tech Corner Brackets */}
-                        <div className="cyber-corner-tl" />
-                        <div className="cyber-corner-br" />
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsOpen(false)}
+                            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+                        />
 
-                        {/* Calendar Header */}
-                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
-                            <button
-                                type="button"
-                                onClick={prevMonth}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
+                        {/* Calendar Modal Card */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.94, y: 12 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                            className="relative z-10 w-full max-w-[350px] bg-[#070b14] border border-cyan-500/40 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(0,240,255,0.25)] p-5 select-none"
+                        >
+                            {/* Tech Corner Brackets */}
+                            <div className="cyber-corner-tl" />
+                            <div className="cyber-corner-br" />
 
-                            <div className="flex flex-col items-center">
-                                <span className="font-mono text-sm font-bold text-white tracking-wider">
-                                    {MONTHS[viewMonth]} {viewYear}
-                                </span>
-                                <span className="text-[9px] font-mono text-cyan-400 tracking-widest uppercase">
-                                    TELEMETRY DATEPICKER
-                                </span>
+                            {/* Header with Title and Close */}
+                            <div className="flex items-start justify-between pb-3 mb-3 border-b border-white/10">
+                                <div>
+                                    <span className="text-[10px] font-mono text-cyan-400 font-bold tracking-widest uppercase block">
+                                        {label || "TELEMETRY DATEPICKER"}
+                                    </span>
+                                    <span className="font-mono text-xs text-gray-400">
+                                        SELECT TARGET DATE
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsOpen(false)}
+                                    className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                                    title="Close Calendar"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={nextMonth}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        {/* Days of Week */}
-                        <div className="grid grid-cols-7 gap-1 mb-2 text-center">
-                            {DAYS_OF_WEEK.map((day, idx) => (
-                                <span
-                                    key={day}
-                                    className={`text-[10px] font-mono font-bold py-1 ${
-                                        idx === 0 || idx === 6 ? "text-cyan-400/70" : "text-gray-400"
-                                    }`}
-                                >
-                                    {day}
-                                </span>
-                            ))}
-                        </div>
-
-                        {/* Days Grid */}
-                        <div className="grid grid-cols-7 gap-1 text-center">
-                            {/* Previous Month Padding */}
-                            {prevDays.map((day, idx) => (
-                                <div
-                                    key={`prev-${idx}`}
-                                    className="h-8 flex items-center justify-center text-[11px] font-mono text-gray-700 select-none"
-                                >
-                                    {day}
-                                </div>
-                            ))}
-
-                            {/* Current Month Active Days */}
-                            {currentDays.map((day) => {
-                                const selected = isSelected(day);
-                                const today = isToday(day);
-                                return (
+                            {/* Month & Year Navigation Bar */}
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
+                                <div className="flex items-center gap-1">
                                     <button
                                         type="button"
-                                        key={`curr-${day}`}
-                                        onClick={() => selectDay(day)}
-                                        className={`h-8 rounded-lg text-xs font-mono font-bold transition-all relative flex items-center justify-center ${
-                                            selected
-                                                ? "bg-cyan-400 text-black shadow-[0_0_12px_rgba(0,240,255,0.7)] scale-105"
-                                                : today
-                                                ? "border border-cyan-400 text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
-                                                : "text-gray-300 hover:bg-white/10 hover:text-white"
+                                        onClick={prevYear}
+                                        title="Previous Year (-1 Year)"
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all text-[11px] font-mono font-bold"
+                                    >
+                                        <ChevronsLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={prevMonth}
+                                        title="Previous Month"
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all"
+                                    >
+                                        <ChevronLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="flex flex-col items-center">
+                                    <span className="font-mono text-sm font-bold text-white tracking-wider">
+                                        {MONTHS[viewMonth]} {viewYear}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={nextMonth}
+                                        title="Next Month"
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all"
+                                    >
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={nextYear}
+                                        title="Next Year (+1 Year)"
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 border border-white/5 hover:border-cyan-500/30 transition-all text-[11px] font-mono font-bold"
+                                    >
+                                        <ChevronsRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Days of Week */}
+                            <div className="grid grid-cols-7 gap-1 mb-2 text-center">
+                                {DAYS_OF_WEEK.map((day, idx) => (
+                                    <span
+                                        key={day}
+                                        className={`text-[10px] font-mono font-bold py-1 ${
+                                            idx === 0 || idx === 6 ? "text-cyan-400/70" : "text-gray-400"
                                         }`}
                                     >
                                         {day}
-                                        {today && !selected && (
-                                            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-cyan-400" />
-                                        )}
-                                    </button>
-                                );
-                            })}
+                                    </span>
+                                ))}
+                            </div>
 
-                            {/* Next Month Padding */}
-                            {nextDays.map((day, idx) => (
-                                <div
-                                    key={`next-${idx}`}
-                                    className="h-8 flex items-center justify-center text-[11px] font-mono text-gray-700 select-none"
+                            {/* Days Grid */}
+                            <div className="grid grid-cols-7 gap-1 text-center">
+                                {prevDays.map((day, idx) => (
+                                    <div
+                                        key={`prev-${idx}`}
+                                        className="h-8 flex items-center justify-center text-[11px] font-mono text-gray-700 select-none"
+                                    >
+                                        {day}
+                                    </div>
+                                ))}
+
+                                {currentDays.map((day) => {
+                                    const selected = isSelected(day);
+                                    const today = isToday(day);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={`curr-${day}`}
+                                            onClick={() => selectDay(day)}
+                                            className={`h-8 rounded-lg text-xs font-mono font-bold transition-all relative flex items-center justify-center ${
+                                                selected
+                                                    ? "bg-cyan-400 text-black shadow-[0_0_12px_rgba(0,240,255,0.7)] scale-105 font-black"
+                                                    : today
+                                                    ? "border border-cyan-400 text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
+                                                    : "text-gray-300 hover:bg-white/10 hover:text-white"
+                                            }`}
+                                        >
+                                            {day}
+                                            {today && !selected && (
+                                                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-cyan-400" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+
+                                {nextDays.map((day, idx) => (
+                                    <div
+                                        key={`next-${idx}`}
+                                        className="h-8 flex items-center justify-center text-[11px] font-mono text-gray-700 select-none"
+                                    >
+                                        {day}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Calendar Footer Actions */}
+                            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                                <button
+                                    type="button"
+                                    onClick={setToday}
+                                    className="px-3 py-1.5 text-[10px] font-mono font-bold tracking-wider text-cyan-300 hover:text-black bg-cyan-500/10 hover:bg-cyan-400 border border-cyan-500/30 rounded-lg transition-all"
                                 >
-                                    {day}
-                                </div>
-                            ))}
-                        </div>
+                                    SET TO TODAY
+                                </button>
 
-                        {/* Calendar Footer Actions */}
-                        <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
-                            <button
-                                type="button"
-                                onClick={setToday}
-                                className="px-3 py-1 text-[10px] font-mono font-bold tracking-wider text-cyan-300 hover:text-black bg-cyan-500/10 hover:bg-cyan-400 border border-cyan-500/30 rounded-lg transition-all"
-                            >
-                                SET TO TODAY
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setIsOpen(false)}
-                                className="text-[10px] font-mono text-gray-400 hover:text-white px-2 py-1 transition-colors"
-                            >
-                                CLOSE
-                            </button>
-                        </div>
-                    </motion.div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsOpen(false)}
+                                    className="text-[10px] font-mono text-gray-400 hover:text-white px-3 py-1.5 transition-colors"
+                                >
+                                    CLOSE
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
         </div>

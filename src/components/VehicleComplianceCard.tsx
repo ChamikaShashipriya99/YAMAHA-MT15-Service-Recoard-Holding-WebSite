@@ -15,11 +15,7 @@ import {
     Sparkles,
     RefreshCw,
     ExternalLink,
-    Camera,
-    Eye,
-    X,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import EditComplianceModal from "@/components/EditComplianceModal";
 import ComplianceAlertBanner from "@/components/ComplianceAlertBanner";
@@ -78,7 +74,6 @@ export default function VehicleComplianceCard() {
     const [isLoading, setIsLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedTab, setSelectedTab] = useState<"insurance" | "revenue" | "emission">("insurance");
-    const [previewPhoto, setPreviewPhoto] = useState<{ title: string; url: string } | null>(null);
 
     const fetchCompliance = async () => {
         try {
@@ -201,7 +196,7 @@ export default function VehicleComplianceCard() {
                                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                             </div>
                             <span className="text-[10px] font-mono tracking-widest text-gray-400 uppercase">
-                                ROAD LEGALITY TELEMETRY // AI DOCUMENT SCANNER
+                                ROAD LEGALITY TELEMETRY // EXPIRY & RENEWAL TRACKER
                             </span>
                         </div>
                     </div>
@@ -211,8 +206,8 @@ export default function VehicleComplianceCard() {
                             onClick={() => setIsEditModalOpen(true)}
                             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-mono font-semibold tracking-wider text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 hover:text-white transition-all shadow-[0_0_12px_rgba(0,240,255,0.12)]"
                         >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span>SCAN & RENEW PAPERS</span>
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>MANAGE & RENEW PAPERS</span>
                         </button>
                     </div>
                 </div>
@@ -273,46 +268,19 @@ export default function VehicleComplianceCard() {
                             </div>
                         </div>
 
-                        {/* Actions: Hotline & View Document Photo */}
-                        <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2">
-                            {insurance?.documentPhotoUrl ? (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPreviewPhoto({
-                                            title: "Vehicle Insurance Certificate",
-                                            url: insurance.documentPhotoUrl!,
-                                        })
-                                    }
-                                    className="inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors"
-                                >
-                                    <Eye className="w-3 h-3" />
-                                    <span>VIEW PHOTO</span>
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedTab("insurance");
-                                        setIsEditModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[10px] font-mono text-gray-500 hover:text-cyan-300 transition-colors"
-                                >
-                                    <Camera className="w-3 h-3" />
-                                    <span>UPLOAD</span>
-                                </button>
-                            )}
-
-                            {insurance?.emergencyHotline && (
+                        {/* Actions: Hotline */}
+                        {insurance?.emergencyHotline && (
+                            <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-mono text-gray-500">24/7 ROADSIDE ASSIST</span>
                                 <a
                                     href={`tel:${insurance.emergencyHotline.replace(/\s+/g, "")}`}
                                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 hover:bg-cyan-500/20 hover:text-white transition-colors shrink-0"
                                 >
                                     <Phone className="w-3 h-3" />
-                                    <span>HOTLINE</span>
+                                    <span>{insurance.emergencyHotline}</span>
                                 </a>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* DOCUMENT 2: REVENUE LICENSE */}
@@ -370,33 +338,7 @@ export default function VehicleComplianceCard() {
                         </div>
 
                         <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-gray-400">
-                            {revenue?.documentPhotoUrl ? (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPreviewPhoto({
-                                            title: "Revenue License Road Tax Sticker",
-                                            url: revenue.documentPhotoUrl!,
-                                        })
-                                    }
-                                    className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors"
-                                >
-                                    <Eye className="w-3 h-3" />
-                                    <span>VIEW STICKER</span>
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedTab("revenue");
-                                        setIsEditModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-gray-500 hover:text-cyan-300 transition-colors"
-                                >
-                                    <Camera className="w-3 h-3" />
-                                    <span>UPLOAD</span>
-                                </button>
-                            )}
+                            <span className="text-gray-400 font-mono">{revenue?.provincialCouncil || "Western Province"}</span>
                             <span className="text-cyan-400 font-medium">{revenue?.fee ? `Fee: ${revenue.fee}` : "ANNUAL PASS"}</span>
                         </div>
                     </div>
@@ -412,37 +354,27 @@ export default function VehicleComplianceCard() {
                                 : "border-white/10 hover:border-cyan-500/30"
                         )}
                     >
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                                        <Wind className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-xs font-mono font-bold text-white tracking-wide">
-                                            EMISSION TEST (VET)
-                                        </h4>
-                                        <span className="text-[10px] font-mono text-gray-400">
-                                            {emission?.testCenter || "DriveGreen Eco Test"}
-                                        </span>
-                                    </div>
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                                    <Wind className="w-4 h-4" />
                                 </div>
-                                {computed && getStatusPill(computed.emissionTest.status, computed.emissionTest.daysRemaining)}
-                            </div>
-
-                            <div className="mt-2 space-y-1.5 font-mono text-xs">
-                                <div className="flex items-center justify-between text-gray-400">
-                                    <span className="text-[11px]">Test Result:</span>
-                                    <span className={cn(
-                                        "font-bold flex items-center gap-1",
-                                        emission?.status === "PASS" ? "text-emerald-400" : "text-rose-400"
-                                    )}>
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        {emission?.status || "PASS"} (NOMINAL)
+                                <div>
+                                    <h4 className="text-xs font-mono font-bold text-white tracking-wide">
+                                        EMISSION TEST
+                                    </h4>
+                                    <span className="text-[10px] font-mono text-gray-400">
+                                        VET Clean Air Cert
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-between text-gray-400">
-                                    <span className="text-[11px]">Cert #:</span>
+                            </div>
+                            {computed && getStatusPill(computed.emissionTest.status, computed.emissionTest.daysRemaining)}
+                        </div>
+
+                        <div className="space-y-1.5 text-xs font-mono">
+                            <div className="p-2 rounded-lg bg-black/40 border border-white/5 space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-gray-400">Certificate:</span>
                                     <span className="text-cyan-300 font-semibold">{emission?.certificateNumber || "N/A"}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-gray-400">
@@ -460,80 +392,12 @@ export default function VehicleComplianceCard() {
                         </div>
 
                         <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-gray-400">
-                            {emission?.documentPhotoUrl ? (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPreviewPhoto({
-                                            title: "Vehicle Emission Test Certificate",
-                                            url: emission.documentPhotoUrl!,
-                                        })
-                                    }
-                                    className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors"
-                                >
-                                    <Eye className="w-3 h-3" />
-                                    <span>VIEW REPORT</span>
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedTab("emission");
-                                        setIsEditModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-gray-500 hover:text-cyan-300 transition-colors"
-                                >
-                                    <Camera className="w-3 h-3" />
-                                    <span>UPLOAD</span>
-                                </button>
-                            )}
+                            <span className="text-gray-400 font-mono">{emission?.testCenter || "DriveGreen"}</span>
                             <span className="text-emerald-400 font-medium">EURO 5 / BS6</span>
                         </div>
                     </div>
                 </div>
             </div>
-
-            {/* Document Photo Lightbox Modal */}
-            <AnimatePresence>
-                {previewPhoto && (
-                    <div key="doc-photo-lightbox" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setPreviewPhoto(null)}
-                            className="absolute inset-0 bg-black/90 backdrop-blur-md"
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="relative max-w-2xl w-full bg-[#070b14] border border-cyan-500/30 rounded-2xl overflow-hidden p-4 shadow-2xl flex flex-col gap-3"
-                        >
-                            <div className="flex items-center justify-between pb-2 border-b border-white/10 text-xs font-mono font-bold text-white">
-                                <span className="flex items-center gap-2 text-cyan-400">
-                                    <Shield className="w-4 h-4" />
-                                    {previewPhoto.title}
-                                </span>
-                                <button
-                                    onClick={() => setPreviewPhoto(null)}
-                                    className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div className="max-h-[75vh] overflow-auto flex items-center justify-center rounded-xl bg-black/60 p-2">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                    src={previewPhoto.url}
-                                    alt={previewPhoto.title}
-                                    className="max-h-[70vh] w-auto object-contain rounded-lg shadow-lg"
-                                />
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* Edit Compliance Modal with OCR */}
             <EditComplianceModal
