@@ -10,6 +10,7 @@ import { useServiceContext } from "@/context/ServiceContext";
 import { useCockpitTheme } from "@/context/ThemeContext";
 import SettingsModal from "@/components/SettingsModal";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import NotificationCenter from "@/components/NotificationCenter";
 
 const navLinks = [
     { name: "COCKPIT", href: "/" },
@@ -44,12 +45,12 @@ export default function Navbar() {
     }
 
     return (
-        <div className="fixed top-4 inset-x-0 mx-auto w-full max-w-4xl z-50 px-4">
+        <div className="fixed top-4 inset-x-0 mx-auto w-full max-w-6xl xl:max-w-7xl z-50 px-4 sm:px-6 lg:px-8">
             <motion.nav
                 initial={{ y: -50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="relative flex items-center justify-between px-5 py-2.5 bg-[#070b14]/90 backdrop-blur-xl border border-cyan-500/25 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.8),0_0_15px_rgba(0,240,255,0.1)]"
+                className="relative flex items-center justify-between px-6 py-2.5 bg-[#070b14]/90 backdrop-blur-xl border border-cyan-500/25 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.8),0_0_15px_rgba(0,240,255,0.1)]"
             >
                 {/* Branding */}
                 <Link href="/" className="flex items-center gap-3 group">
@@ -110,6 +111,8 @@ export default function Navbar() {
                         <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     </motion.button>
 
+                    <NotificationCenter />
+
                     <ThemeSwitcher />
 
                     <motion.button
@@ -135,14 +138,17 @@ export default function Navbar() {
                     </motion.button>
                 </div>
 
-                {/* Mobile Menu Button */}
-                <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="md:hidden p-2 rounded-xl text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                    aria-label="Toggle Navigation Menu"
-                >
-                    {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                </button>
+                {/* Mobile Notification & Menu Buttons */}
+                <div className="md:hidden flex items-center gap-2">
+                    <NotificationCenter />
+                    <button
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="p-2 rounded-xl text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                        aria-label="Toggle Navigation Menu"
+                    >
+                        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                    </button>
+                </div>
             </motion.nav>
 
             {/* Mobile Menu Dropdown */}

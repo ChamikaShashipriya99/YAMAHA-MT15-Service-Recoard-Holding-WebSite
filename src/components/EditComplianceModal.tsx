@@ -27,6 +27,7 @@ interface EditComplianceModalProps {
     onClose: () => void;
     initialData: any;
     onSuccess: () => void;
+    initialTab?: TabType;
 }
 
 type TabType = "insurance" | "revenue" | "emission";
@@ -63,10 +64,17 @@ export default function EditComplianceModal({
     onClose,
     initialData,
     onSuccess,
+    initialTab,
 }: EditComplianceModalProps) {
-    const [activeTab, setActiveTab] = useState<TabType>("insurance");
+    const [activeTab, setActiveTab] = useState<TabType>(initialTab || "insurance");
     const [isSaving, setIsSaving] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab, isOpen]);
 
     // OCR Scanning State
     const [isScanning, setIsScanning] = useState(false);
@@ -245,6 +253,9 @@ export default function EditComplianceModal({
             }
 
             setStatusMessage({ type: "success", text: "Compliance records & documents updated successfully!" });
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("complianceUpdated"));
+            }
             onSuccess();
             setTimeout(() => {
                 setStatusMessage(null);

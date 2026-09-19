@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import EditComplianceModal from "@/components/EditComplianceModal";
 import ComplianceAlertBanner from "@/components/ComplianceAlertBanner";
+import { dispatchCompliancePushAlerts } from "@/lib/complianceNotifier";
 
 export interface ComplianceData {
     compliance: {
@@ -76,6 +77,7 @@ export default function VehicleComplianceCard() {
     const [data, setData] = useState<ComplianceData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [selectedTab, setSelectedTab] = useState<"insurance" | "revenue" | "emission">("insurance");
     const [previewPhoto, setPreviewPhoto] = useState<{ title: string; url: string } | null>(null);
 
     const fetchCompliance = async () => {
@@ -84,6 +86,10 @@ export default function VehicleComplianceCard() {
             const json = await res.json();
             if (json.success && json.data) {
                 setData(json.data);
+                // Trigger 3-stage push notifications check (deduplicated via localStorage)
+                dispatchCompliancePushAlerts(json.data).catch((err) => {
+                    console.warn("Compliance push dispatch warning:", err);
+                });
             }
         } catch (error) {
             console.error("Failed to fetch compliance:", error);
@@ -94,22 +100,62 @@ export default function VehicleComplianceCard() {
 
     useEffect(() => {
         fetchCompliance();
+
+        const handleOpen = (e: any) => {
+            if (e?.detail?.type) {
+                const mapType: Record<string, "insurance" | "revenue" | "emission"> = {
+                    insurance: "insurance",
+                    revenueLicense: "revenue",
+                    emissionTest: "emission",
+                };
+                if (mapType[e.detail.type]) {
+                    setSelectedTab(mapType[e.detail.type]);
+                }
+            }
+            setIsEditModalOpen(true);
+        };
+
+        const handleUpdated = () => fetchCompliance();
+
+        window.addEventListener("openComplianceModal", handleOpen);
+        window.addEventListener("complianceUpdated", handleUpdated);
+
+        return () => {
+            window.removeEventListener("openComplianceModal", handleOpen);
+            window.removeEventListener("complianceUpdated", handleUpdated);
+        };
     }, []);
 
     const getStatusPill = (status: "VALID" | "EXPIRING_SOON" | "EXPIRED", days: number) => {
-        if (status === "EXPIRED") {
+        if (status === "EXPIRED" || days < 0) {
             return (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/15 border border-rose-500/40 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 border border-rose-500/50 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
                     EXPIRED ({Math.abs(days)}d ago)
                 </span>
             );
         }
-        if (status === "EXPIRING_SOON") {
+        if (days <= 5) {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-500/20 border border-red-500/50 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.3)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    STAGE 3 // {days}d FINAL NOTICE
+                </span>
+            );
+        }
+        if (days <= 15) {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-orange-500/20 border border-orange-500/50 text-orange-300 shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                    STAGE 2 // DUE IN {days}d
+                </span>
+            );
+        }
+        if (days <= 30) {
             return (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 border border-amber-500/40 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    DUE IN {days} DAYS
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    STAGE 1 // DUE IN {days}d
                 </span>
             );
         }
@@ -246,7 +292,10 @@ export default function VehicleComplianceCard() {
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => setIsEditModalOpen(true)}
+                                    onClick={() => {
+                                        setSelectedTab("insurance");
+                                        setIsEditModalOpen(true);
+                                    }}
                                     className="inline-flex items-center gap-1 text-[10px] font-mono text-gray-500 hover:text-cyan-300 transition-colors"
                                 >
                                     <Camera className="w-3 h-3" />
@@ -338,7 +387,10 @@ export default function VehicleComplianceCard() {
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => setIsEditModalOpen(true)}
+                                    onClick={() => {
+                                        setSelectedTab("revenue");
+                                        setIsEditModalOpen(true);
+                                    }}
                                     className="inline-flex items-center gap-1 text-gray-500 hover:text-cyan-300 transition-colors"
                                 >
                                     <Camera className="w-3 h-3" />
@@ -425,7 +477,10 @@ export default function VehicleComplianceCard() {
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => setIsEditModalOpen(true)}
+                                    onClick={() => {
+                                        setSelectedTab("emission");
+                                        setIsEditModalOpen(true);
+                                    }}
                                     className="inline-flex items-center gap-1 text-gray-500 hover:text-cyan-300 transition-colors"
                                 >
                                     <Camera className="w-3 h-3" />
@@ -486,6 +541,7 @@ export default function VehicleComplianceCard() {
                 onClose={() => setIsEditModalOpen(false)}
                 initialData={data?.compliance}
                 onSuccess={fetchCompliance}
+                initialTab={selectedTab}
             />
         </div>
     );

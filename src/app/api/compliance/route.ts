@@ -6,7 +6,7 @@ import { logSecurityEvent } from "@/lib/audit";
 
 function calculateDocumentStatus(expiryDateStr: string) {
     if (!expiryDateStr) {
-        return { daysRemaining: 0, status: "EXPIRED" as const };
+        return { daysRemaining: 0, status: "EXPIRED" as const, milestone: "EXPIRED" as const, stageNumber: 0 };
     }
     const expiry = new Date(expiryDateStr);
     const now = new Date();
@@ -15,12 +15,18 @@ function calculateDocumentStatus(expiryDateStr: string) {
     const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
     if (daysRemaining < 0) {
-        return { daysRemaining, status: "EXPIRED" as const };
+        return { daysRemaining, status: "EXPIRED" as const, milestone: "EXPIRED" as const, stageNumber: 0 };
+    }
+    if (daysRemaining <= 5) {
+        return { daysRemaining, status: "EXPIRING_SOON" as const, milestone: "5_DAYS" as const, stageNumber: 3 };
+    }
+    if (daysRemaining <= 15) {
+        return { daysRemaining, status: "EXPIRING_SOON" as const, milestone: "15_DAYS" as const, stageNumber: 2 };
     }
     if (daysRemaining <= 30) {
-        return { daysRemaining, status: "EXPIRING_SOON" as const };
+        return { daysRemaining, status: "EXPIRING_SOON" as const, milestone: "30_DAYS" as const, stageNumber: 1 };
     }
-    return { daysRemaining, status: "VALID" as const };
+    return { daysRemaining, status: "VALID" as const, milestone: "NOMINAL" as const, stageNumber: -1 };
 }
 
 export async function GET() {
@@ -45,6 +51,8 @@ export async function GET() {
             expiryDate: string;
             daysRemaining: number;
             status: "EXPIRED" | "EXPIRING_SOON" | "VALID";
+            milestone: "EXPIRED" | "5_DAYS" | "15_DAYS" | "30_DAYS" | "NOMINAL";
+            stageNumber: number;
         }> = [];
 
         if (insuranceStatus.status !== "VALID") {
@@ -54,6 +62,8 @@ export async function GET() {
                 expiryDate: compliance.insurance.expiryDate,
                 daysRemaining: insuranceStatus.daysRemaining,
                 status: insuranceStatus.status,
+                milestone: insuranceStatus.milestone,
+                stageNumber: insuranceStatus.stageNumber,
             });
         }
         if (revenueStatus.status !== "VALID") {
@@ -63,6 +73,8 @@ export async function GET() {
                 expiryDate: compliance.revenueLicense.expiryDate,
                 daysRemaining: revenueStatus.daysRemaining,
                 status: revenueStatus.status,
+                milestone: revenueStatus.milestone,
+                stageNumber: revenueStatus.stageNumber,
             });
         }
         if (emissionStatus.status !== "VALID") {
@@ -72,6 +84,8 @@ export async function GET() {
                 expiryDate: compliance.emissionTest.expiryDate,
                 daysRemaining: emissionStatus.daysRemaining,
                 status: emissionStatus.status,
+                milestone: emissionStatus.milestone,
+                stageNumber: emissionStatus.stageNumber,
             });
         }
 
