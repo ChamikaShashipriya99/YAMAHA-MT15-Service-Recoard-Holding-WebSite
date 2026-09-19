@@ -9,7 +9,8 @@ import {
     AUTH_CONFIG,
 } from "@/lib/auth";
 import { checkRateLimitAsync, recordAttemptAsync, resetRateLimitAsync, getClientIp } from "@/lib/rateLimit";
-import { logSecurityEvent } from "@/lib/audit";
+import { logSecurityEvent, getUserAgent } from "@/lib/audit";
+import { sendTelegramSecurityAlert } from "@/lib/telegramBot";
 
 export async function POST(request: NextRequest) {
     try {
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
                     rateCheck.retryAfterSeconds / 60
                 )} mins`,
             });
+
+            // Dispatch Telegram Security Alert for Terminal Lockout
+            await sendTelegramSecurityAlert("LOGIN_LOCKOUT", {
+                clientIp,
+                userAgent: getUserAgent(request),
+                timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+            }).catch((err) => console.warn("Telegram alert failed:", err));
 
             return NextResponse.json(
                 {
@@ -65,6 +73,15 @@ export async function POST(request: NextRequest) {
                 details: `Invalid password attempt for account '${username}'`,
             });
 
+            // Dispatch Telegram Security Alert for Invalid Password
+            await sendTelegramSecurityAlert("LOGIN_FAILED", {
+                clientIp,
+                userAgent: getUserAgent(request),
+                username,
+                reason: "Invalid password provided",
+                timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+            }).catch((err) => console.warn("Telegram alert failed:", err));
+
             return NextResponse.json(
                 { success: false, error: "Invalid username or password" },
                 { status: 401 }
@@ -84,6 +101,15 @@ export async function POST(request: NextRequest) {
                     request,
                     details: "Invalid or already-consumed emergency recovery code",
                 });
+
+                // Dispatch Telegram Security Alert for Invalid Recovery Code
+                await sendTelegramSecurityAlert("LOGIN_FAILED", {
+                    clientIp,
+                    userAgent: getUserAgent(request),
+                    username,
+                    reason: "Invalid or already-consumed emergency recovery code",
+                    timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+                }).catch((err) => console.warn("Telegram alert failed:", err));
 
                 return NextResponse.json(
                     { success: false, error: "Invalid or already used emergency recovery code" },
@@ -108,6 +134,15 @@ export async function POST(request: NextRequest) {
                     request,
                     details: "Invalid 6-digit Google Authenticator code attempt",
                 });
+
+                // Dispatch Telegram Security Alert for Invalid 2FA TOTP
+                await sendTelegramSecurityAlert("LOGIN_FAILED", {
+                    clientIp,
+                    userAgent: getUserAgent(request),
+                    username,
+                    reason: "Invalid 6-digit Google Authenticator 2FA code",
+                    timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+                }).catch((err) => console.warn("Telegram alert failed:", err));
 
                 return NextResponse.json(
                     {
@@ -135,6 +170,14 @@ export async function POST(request: NextRequest) {
                 ? "Emergency recovery code consumed for login"
                 : "Cockpit session engaged via 2FA TOTP",
         });
+
+        // Dispatch Telegram Security Alert for Login Success
+        await sendTelegramSecurityAlert("LOGIN_SUCCESS", {
+            clientIp,
+            userAgent: getUserAgent(request),
+            username: AUTH_CONFIG.username,
+            timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+        }).catch((err) => console.warn("Telegram alert failed:", err));
 
         // 4. Set Secure Session Cookie with SameSite=strict
         const response = NextResponse.json({

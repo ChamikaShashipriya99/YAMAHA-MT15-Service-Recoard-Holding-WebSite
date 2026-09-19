@@ -1,10 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
+import { verifyRequestSession } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const session = await verifyRequestSession(request);
+        if (!session) {
+            return NextResponse.json(
+                { success: false, error: "Unauthorized: Active session required." },
+                { status: 401 }
+            );
+        }
+
         const start = Date.now();
         await connectToDatabase();
         const latencyMs = Date.now() - start;

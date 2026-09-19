@@ -1,4 +1,4 @@
-﻿import { connectToDatabase } from "@/lib/mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
 import TelegramConfig from "@/models/TelegramConfig";
 import ServiceRecord from "@/models/ServiceRecord";
 import VehicleCompliance from "@/models/VehicleCompliance";
@@ -264,4 +264,87 @@ export async function dispatchTelegramComplianceAlerts(): Promise<number> {
     }
 
     return sentCount;
+}
+
+/**
+ * Dispatches real-time security alerts to the rider's Telegram
+ */
+export async function sendTelegramSecurityAlert(
+    alertType: "LOGIN_SUCCESS" | "LOGIN_FAILED" | "LOGIN_LOCKOUT" | "UNAUTHORIZED_BOT_ACCESS",
+    meta: {
+        clientIp?: string;
+        userAgent?: string;
+        username?: string;
+        reason?: string;
+        attemptedCommand?: string;
+        attackerChatId?: string;
+        attackerName?: string;
+        timestamp?: string;
+    }
+): Promise<boolean> {
+    const creds = await getTelegramCredentials();
+    if (!creds.enabled || !creds.botToken || !creds.chatId) {
+        return false;
+    }
+
+    const time = meta.timestamp || new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" });
+    const ip = meta.clientIp || "Unknown IP";
+    const device = meta.userAgent ? meta.userAgent.slice(0, 60) : "Unknown Device";
+
+    let message = "";
+
+    switch (alertType) {
+        case "LOGIN_SUCCESS":
+            message = `🛡️ <b>[COCKPIT SECURITY // LOGIN AUTHORIZED]</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `A valid session was established on your Yamaha MT-15 Mission Control.\n\n` +
+                `👤 <b>Operator:</b> <code>${meta.username || "Chamikaz99"}</code>\n` +
+                `🌐 <b>IP Address:</b> <code>${ip}</code>\n` +
+                `💻 <b>Device:</b> <code>${device}</code>\n` +
+                `⏰ <b>Time:</b> <code>${time}</code>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `<i>If this was not you, disconnect the session from Settings immediately.</i>`;
+            break;
+
+        case "LOGIN_FAILED":
+            message = `⚠️ <b>[SECURITY WARNING // FAILED LOGIN ATTEMPT]</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `A failed login attempt was detected on your MT-15 Cockpit!\n\n` +
+                `👤 <b>Attempted User:</b> <code>${meta.username || "Unknown"}</code>\n` +
+                `❌ <b>Failure Reason:</b> <code>${meta.reason || "Authentication Rejected"}</code>\n` +
+                `🌐 <b>IP Address:</b> <code>${ip}</code>\n` +
+                `💻 <b>Device:</b> <code>${device}</code>\n` +
+                `⏰ <b>Time:</b> <code>${time}</code>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `<i>Threat telemetry logged to MongoDB Atlas.</i>`;
+            break;
+
+        case "LOGIN_LOCKOUT":
+            message = `🚨 <b>[CRITICAL SECURITY // RATE LIMIT LOCKOUT]</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `Terminal lockout triggered after multiple failed login attempts!\n\n` +
+                `🌐 <b>Target IP:</b> <code>${ip}</code>\n` +
+                `🔒 <b>Status:</b> Locked for 15 minutes\n` +
+                `⏰ <b>Time:</b> <code>${time}</code>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `<i>Attacker IP has been throttled by RateLimitGuardian.</i>`;
+            break;
+
+        case "UNAUTHORIZED_BOT_ACCESS":
+            message = `🚨 <b>[INTRUSION ATTEMPT // UNKNOWN BOT OPERATOR]</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `An unauthorized user tried to execute commands on your MT-15 Telegram Bot!\n\n` +
+                `👤 <b>Telegram User:</b> <code>${meta.attackerName || "Unknown"}</code>\n` +
+                `🆔 <b>Telegram Chat ID:</b> <code>${meta.attackerChatId || "N/A"}</code>\n` +
+                `💬 <b>Attempted Text:</b> <code>${meta.attemptedCommand || "N/A"}</code>\n` +
+                `⏰ <b>Time:</b> <code>${time}</code>\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `<i>Access was blocked immediately. Their Chat ID has been flagged.</i>`;
+            break;
+    }
+
+    const res = await sendTelegramMessage(creds.chatId, message, {
+        botToken: creds.botToken,
+    });
+    return res.success;
 }

@@ -13,7 +13,9 @@ export type AuditEventType =
     | "REPORT_EXPORTED"
     | "SESSION_REVOKED"
     | "INACTIVITY_LOCKED"
-    | "INACTIVITY_UNLOCKED";
+    | "INACTIVITY_UNLOCKED"
+    | "TELEGRAM_CONFIG_UPDATED"
+    | "TELEGRAM_UNAUTHORIZED_ACCESS";
 
 export type AuditEventStatus = "SUCCESS" | "WARNING" | "CRITICAL";
 

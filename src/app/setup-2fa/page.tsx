@@ -13,6 +13,8 @@ import {
     AlertCircle,
     CheckCircle2,
     RefreshCw,
+    Lock,
+    Key,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -21,6 +23,7 @@ export default function Setup2FAPage() {
         username: string;
         secret: string;
         qrCodeDataUrl: string;
+        authenticated?: boolean;
     } | null>(null);
     const [loading, setLoading] = useState(true);
     const [copied, setCopied] = useState(false);
@@ -31,16 +34,28 @@ export default function Setup2FAPage() {
         message?: string;
     }>({ checked: false });
 
+    // Password unlock state for unauthenticated setup
+    const [requiresPassword, setRequiresPassword] = useState(false);
+    const [passwordInput, setPasswordInput] = useState("");
+    const [authError, setAuthError] = useState("");
+    const [authenticating, setAuthenticating] = useState(false);
+
     useEffect(() => {
         fetch("/api/auth/setup-2fa")
             .then((res) => res.json())
             .then((data) => {
-                if (data.success) {
+                if (data.success && data.authenticated && data.secret) {
                     setSetupData(data);
+                    setRequiresPassword(false);
+                } else {
+                    setRequiresPassword(true);
                 }
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
+            .catch(() => {
+                setRequiresPassword(true);
+                setLoading(false);
+            });
     }, []);
 
     const copySecret = () => {
@@ -51,35 +66,73 @@ export default function Setup2FAPage() {
         }
     };
 
+    const unlockWithPassword = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!passwordInput.trim()) {
+            setAuthError("Please enter your master password to reveal 2FA pairing data.");
+            return;
+        }
+
+        setAuthenticating(true);
+        setAuthError("");
+
+        try {
+            const res = await fetch("/api/auth/setup-2fa", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password: passwordInput.trim() }),
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success && data.secret) {
+                setSetupData(data);
+                setRequiresPassword(false);
+                setPasswordInput("");
+            } else {
+                setAuthError(data.error || "Authentication failed. Incorrect password.");
+            }
+        } catch {
+            setAuthError("Network error. Please try again.");
+        } finally {
+            setAuthenticating(false);
+        }
+    };
+
     const verifyTestCode = async () => {
         if (!testCode || testCode.length !== 6) {
             setTestStatus({ checked: true, valid: false, message: "Enter a 6-digit code" });
             return;
         }
 
-        // Test the code against login endpoint or verification
-        const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                username: "Chamikaz99",
-                password: "Chamika020511",
-                totpCode: testCode,
-            }),
-        });
-
-        const data = await res.json();
-        if (res.ok && data.success) {
-            setTestStatus({
-                checked: true,
-                valid: true,
-                message: "Code verified successfully! Google Authenticator is configured.",
+        try {
+            const res = await fetch("/api/auth/setup-2fa", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "test_code",
+                    totpCode: testCode,
+                }),
             });
-        } else {
+
+            const data = await res.json();
+            if (res.ok && data.success && data.valid) {
+                setTestStatus({
+                    checked: true,
+                    valid: true,
+                    message: "Code verified successfully! Google Authenticator is configured.",
+                });
+            } else {
+                setTestStatus({
+                    checked: true,
+                    valid: false,
+                    message: data.error || "Code mismatch. Check your phone's clock & app code.",
+                });
+            }
+        } catch {
             setTestStatus({
                 checked: true,
                 valid: false,
-                message: data.error || "Code mismatch. Check your phone's clock & app code.",
+                message: "Failed to connect to verification service.",
             });
         }
     };
@@ -218,6 +271,62 @@ export default function Setup2FAPage() {
                             </Link>
                         </div>
                     </div>
+                ) : requiresPassword ? (
+                    <form onSubmit={unlockWithPassword} className="flex flex-col gap-5 py-4">
+                        <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/20 flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
+                                <Lock className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col gap-1 text-xs font-mono">
+                                <span className="text-white font-bold tracking-wider">
+                                    MASTER CREDENTIALS REQUIRED
+                                </span>
+                                <span className="text-gray-400 leading-relaxed">
+                                    To prevent unauthorized interception of your Google Authenticator key, enter your master password to generate and reveal the pairing QR matrix.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[10px] font-mono tracking-widest text-cyan-400 font-bold uppercase flex items-center gap-1.5">
+                                <Key className="w-3.5 h-3.5" />
+                                ENTER MASTER COCKPIT PASSWORD
+                            </label>
+                            <input
+                                type="password"
+                                placeholder="Enter master password to unlock 2FA"
+                                value={passwordInput}
+                                onChange={(e) => setPasswordInput(e.target.value)}
+                                className="w-full px-4 py-3 bg-black/60 border border-white/15 focus:border-cyan-400 rounded-xl text-white font-mono text-sm tracking-wider focus:outline-none transition-all shadow-inner"
+                                autoFocus
+                            />
+                        </div>
+
+                        {authError && (
+                            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                <span>{authError}</span>
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={authenticating}
+                            className="w-full py-3 rounded-xl text-xs font-mono font-bold text-black bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 shadow-[0_0_20px_rgba(0,240,255,0.35)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                        >
+                            {authenticating ? (
+                                <>
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <span>DECRYPTING PAIRING PROTOCOL...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>AUTHENTICATE & REVEAL 2FA QR</span>
+                                    <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                                </>
+                            )}
+                        </button>
+                    </form>
                 ) : (
                     <div className="py-8 text-center text-xs font-mono text-rose-400">
                         Failed to load 2FA setup data. Please refresh the page.

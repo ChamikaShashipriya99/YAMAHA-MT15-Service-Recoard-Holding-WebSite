@@ -4,6 +4,7 @@ import VehicleCompliance from "@/models/VehicleCompliance";
 import { verifyRequestSession } from "@/lib/auth";
 import { logSecurityEvent } from "@/lib/audit";
 import { dispatchTelegramComplianceAlerts } from "@/lib/telegramBot";
+import { sanitizeMongoInput } from "@/lib/sanitize";
 
 function calculateDocumentStatus(expiryDateStr: string) {
     if (!expiryDateStr) {
@@ -30,8 +31,16 @@ function calculateDocumentStatus(expiryDateStr: string) {
     return { daysRemaining, status: "VALID" as const, milestone: "NOMINAL" as const, stageNumber: -1 };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const session = await verifyRequestSession(request);
+        if (!session) {
+            return NextResponse.json(
+                { success: false, error: "Unauthorized: Active session required." },
+                { status: 401 }
+            );
+        }
+
         await connectToDatabase();
         let compliance = await VehicleCompliance.findOne({ bikeIdentifier: "YAMAHA_MT15_PRIMARY" });
 
@@ -128,7 +137,8 @@ export async function PUT(request: NextRequest) {
         }
 
         await connectToDatabase();
-        const body = await request.json();
+        const rawBody = await request.json();
+        const body = sanitizeMongoInput(rawBody);
 
         let compliance = await VehicleCompliance.findOne({ bikeIdentifier: "YAMAHA_MT15_PRIMARY" });
         if (!compliance) {

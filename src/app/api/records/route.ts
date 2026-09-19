@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
-import { validateDate, validateMileage, sanitizeText, sanitizeCost } from "@/lib/sanitize";
+import { validateDate, validateMileage, sanitizeText, sanitizeCost, sanitizeMongoInput } from "@/lib/sanitize";
 import { verifyRequestSession } from "@/lib/auth";
 import { logSecurityEvent } from "@/lib/audit";
 import { encryptText, decryptText } from "@/lib/crypto";
 
 // GET /api/records - Retrieve all records ordered by date descending with decryption
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const session = await verifyRequestSession(request);
+        if (!session) {
+            return NextResponse.json(
+                { success: false, error: "Unauthorized: Active session required." },
+                { status: 401 }
+            );
+        }
+
         await connectToDatabase();
         const records = await ServiceRecordModel.find({}).sort({ date: -1 }).lean();
 
@@ -42,7 +50,8 @@ export async function POST(request: NextRequest) {
         }
 
         await connectToDatabase();
-        const body = await request.json();
+        const rawBody = await request.json();
+        const body = sanitizeMongoInput(rawBody);
 
         const { date, mileage, oilChange, filterChange, notes, cost } = body;
 

@@ -9,7 +9,8 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // 0. CSRF Protection: Verify Origin on mutating requests (POST, PUT, DELETE, PATCH)
-    if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method)) {
+    // Server-to-server webhooks (Telegram API) bypass browser Origin checks
+    if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method) && !pathname.startsWith("/api/telegram/webhook")) {
         const origin = request.headers.get("origin");
         const host = request.headers.get("host");
 
@@ -36,6 +37,7 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith("/login") ||
         pathname.startsWith("/setup-2fa") ||
         pathname.startsWith("/api/auth") ||
+        pathname.startsWith("/api/telegram/webhook") ||
         pathname.startsWith("/_next") ||
         pathname.startsWith("/models") ||
         pathname === "/LoadingScreenMT15.mp4" ||

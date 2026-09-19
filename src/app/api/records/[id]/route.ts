@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecordModel from "@/models/ServiceRecord";
-import { validateDate, validateMileage, sanitizeText, sanitizeCost } from "@/lib/sanitize";
+import { validateDate, validateMileage, sanitizeText, sanitizeCost, sanitizeMongoInput, isValidObjectId } from "@/lib/sanitize";
 import { verifyRequestSession } from "@/lib/auth";
 import { encryptText, decryptText } from "@/lib/crypto";
 
@@ -24,14 +24,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         const { id } = await params;
         await connectToDatabase();
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
+        if (!isValidObjectId(id) || !mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json(
-                { success: false, error: "Invalid record ID" },
+                { success: false, error: "Invalid record ID format" },
                 { status: 400 }
             );
         }
 
-        const body = await request.json();
+        const rawBody = await request.json();
+        const body = sanitizeMongoInput(rawBody);
         const updates: Record<string, any> = {};
 
         if (body.date !== undefined) {
@@ -118,9 +119,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         const { id } = await params;
         await connectToDatabase();
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
+        if (!isValidObjectId(id) || !mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json(
-                { success: false, error: "Invalid record ID" },
+                { success: false, error: "Invalid record ID format" },
                 { status: 400 }
             );
         }

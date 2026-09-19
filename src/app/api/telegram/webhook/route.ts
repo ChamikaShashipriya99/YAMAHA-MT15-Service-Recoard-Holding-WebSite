@@ -1,13 +1,15 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import ServiceRecord from "@/models/ServiceRecord";
 import VehicleCompliance from "@/models/VehicleCompliance";
 import {
     sendTelegramMessage,
+    sendTelegramSecurityAlert,
     getCockpitInlineKeyboard,
     formatCockpitStatusMessage,
     getTelegramCredentials,
 } from "@/lib/telegramBot";
+import { logSecurityEvent } from "@/lib/audit";
 
 export async function GET() {
     return NextResponse.json({
@@ -58,6 +60,46 @@ export async function POST(req: NextRequest) {
         }
 
         await connectToDatabase();
+
+        // --- SECURITY ACCESS CONTROL: OWNER CHAT ID WHITELIST ---
+        if (creds.chatId && String(chatId) !== String(creds.chatId)) {
+            // 1. Log critical intrusion attempt in MongoDB AuditLog
+            await logSecurityEvent({
+                eventType: "TELEGRAM_UNAUTHORIZED_ACCESS",
+                status: "CRITICAL",
+                clientIp: "Telegram Cloud API",
+                userAgent: `Telegram User: ${fromUser} (Chat ID: ${chatId})`,
+                details: `Intrusion blocked: Unauthorized command attempt: "${text}"`,
+            });
+
+            // 2. Dispatch immediate high-priority intrusion push to owner's Telegram
+            await sendTelegramSecurityAlert("UNAUTHORIZED_BOT_ACCESS", {
+                attackerName: fromUser,
+                attackerChatId: chatId,
+                attemptedCommand: text,
+                timestamp: new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" }),
+            }).catch(() => {});
+
+            // 3. Send warning denial to the unauthorized user
+            const denialText = `🚫 <b>[ACCESS DENIED // MT-15 COCKPIT SECURITY]</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+This bot terminal is encrypted and paired exclusively with the authorized bike owner.
+
+👤 <b>Your Telegram User:</b> <code>${fromUser}</code>
+🆔 <b>Your Chat ID:</b> <code>${chatId}</code>
+🔒 <b>Security Status:</b> <b>INTRUSION FLAGGED & LOGGED</b>
+
+Your access attempt has been recorded in MongoDB Atlas and reported immediately to the bike owner's secure telemetry device.
+━━━━━━━━━━━━━━━━━━━━━━━━
+<i>Access to telemetry, compliance, and bike controls is restricted.</i>`;
+
+            await sendTelegramMessage(chatId, denialText, {
+                botToken,
+                reply_markup: { remove_keyboard: true },
+            });
+
+            return NextResponse.json({ ok: true });
+        }
 
         // --- COMMAND HANDLERS ---
 

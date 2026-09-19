@@ -50,3 +50,35 @@ export function sanitizeCost(cost: unknown): string {
         .replace(/[^0-9.]/g, "")
         .slice(0, 15);
 }
+
+/**
+ * Validates MongoDB 24-character hexadecimal ObjectId format
+ */
+export function isValidObjectId(id: unknown): boolean {
+    if (typeof id !== "string") return false;
+    return /^[a-fA-F0-9]{24}$/.test(id.trim());
+}
+
+/**
+ * Recursively scrubs MongoDB query operator keys ('$' and '.') to neutralize NoSQL injection
+ */
+export function sanitizeMongoInput<T>(input: T): T {
+    if (!input || typeof input !== "object") {
+        return input;
+    }
+
+    if (Array.isArray(input)) {
+        return input.map((item) => sanitizeMongoInput(item)) as unknown as T;
+    }
+
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+        // Strip keys starting with '$' or containing '.'
+        if (key.startsWith("$") || key.includes(".")) {
+            continue;
+        }
+        clean[key] = sanitizeMongoInput(value);
+    }
+
+    return clean as T;
+}

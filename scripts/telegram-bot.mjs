@@ -1,15 +1,40 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const MONGODB_URI = "mongodb+srv://chamikashashipriya3_db_user:cmDw8KszEqH0w5Re@mt15.qooxk3m.mongodb.net/yamaha_mt15?retryWrites=true&w=majority&appName=MT15";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Safely load MONGODB_URI from process.env or .env.local without hardcoding secrets
+let mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+    const envPath = path.resolve(__dirname, "../.env.local");
+    if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, "utf8");
+        for (const line of envContent.split("\n")) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("MONGODB_URI=")) {
+                mongoUri = trimmed.replace("MONGODB_URI=", "").trim().replace(/^["']|["']$/g, "");
+                break;
+            }
+        }
+    }
+}
+
+if (!mongoUri) {
+    console.error("FATAL SECURITY ERROR: MONGODB_URI environment variable is missing. Configure it in .env.local.");
+    process.exit(1);
+}
 
 async function run() {
     console.log("Connecting to MongoDB Atlas...");
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(mongoUri);
     console.log("Connected to MongoDB.");
 
     const configCollection = mongoose.connection.collection("telegramconfigs");
     const recordsCollection = mongoose.connection.collection("servicerecords");
     const complianceCollection = mongoose.connection.collection("vehiclecompliances");
+    const auditCollection = mongoose.connection.collection("auditlogs");
 
     const config = await configCollection.findOne({});
     if (!config || !config.botToken) {
@@ -88,7 +113,54 @@ async function run() {
         }
 
         if (!chatId || !text) return;
-        console.log(`[Update ${update.update_id}] Received from ${fromUser}: "${text}"`);
+        console.log(`[Update ${update.update_id}] Received from ${fromUser} (Chat ID: ${chatId}): "${text}"`);
+
+        // --- SECURITY ACCESS CONTROL: OWNER CHAT ID WHITELIST ---
+        if (config.chatId && String(chatId) !== String(config.chatId)) {
+            console.warn(`[SECURITY ALERT] Unauthorized access blocked from ${fromUser} (Chat ID: ${chatId}): "${text}"`);
+
+            // 1. Log to MongoDB Atlas AuditLog
+            try {
+                await auditCollection.insertOne({
+                    eventType: "TELEGRAM_UNAUTHORIZED_ACCESS",
+                    status: "CRITICAL",
+                    clientIp: "Telegram Bot Poller",
+                    userAgent: `Telegram User: ${fromUser} (Chat ID: ${chatId})`,
+                    details: `Intrusion blocked: Unauthorized command attempt: "${text}"`,
+                    timestamp: new Date(),
+                });
+            } catch (err) {
+                console.error("Failed to log audit event:", err);
+            }
+
+            // 2. Alert the legitimate owner on Telegram
+            const intrusionWarning = `🚨 <b>[INTRUSION ATTEMPT // UNKNOWN BOT OPERATOR]</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+An unauthorized user tried to execute commands on your MT-15 Telegram Bot!
+
+👤 <b>Telegram User:</b> <code>${fromUser}</code>
+🆔 <b>Telegram Chat ID:</b> <code>${chatId}</code>
+💬 <b>Attempted Text:</b> <code>${text}</code>
+⏰ <b>Time:</b> <code>${new Date().toLocaleString("en-US", { timeZone: "Asia/Colombo" })}</code>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<i>Access was blocked immediately. Their Chat ID has been flagged.</i>`;
+            await sendMessage(config.chatId, intrusionWarning, { remove_keyboard: true });
+
+            // 3. Send denial message to intruder
+            const denialText = `🚫 <b>[ACCESS DENIED // MT-15 COCKPIT SECURITY]</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+This bot terminal is encrypted and paired exclusively with the authorized bike owner.
+
+👤 <b>Your Telegram User:</b> <code>${fromUser}</code>
+🆔 <b>Your Chat ID:</b> <code>${chatId}</code>
+🔒 <b>Security Status:</b> <b>INTRUSION FLAGGED & LOGGED</b>
+
+Your access attempt has been recorded in MongoDB Atlas and reported immediately to the bike owner's secure telemetry device.
+━━━━━━━━━━━━━━━━━━━━━━━━
+<i>Access to telemetry, compliance, and bike controls is restricted.</i>`;
+            await sendMessage(chatId, denialText, { remove_keyboard: true });
+            return;
+        }
 
         // 1. /start
         if (text === "/start") {

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import TelegramConfig from "@/models/TelegramConfig";
 import {
@@ -7,9 +7,16 @@ import {
     getCockpitInlineKeyboard,
     getTelegramCredentials,
 } from "@/lib/telegramBot";
+import { verifyRequestSession } from "@/lib/auth";
+import { logSecurityEvent } from "@/lib/audit";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
+        const session = await verifyRequestSession(req);
+        if (!session) {
+            return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
+        }
+
         await connectToDatabase();
         let config = await TelegramConfig.findOne();
 
@@ -57,6 +64,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
     try {
+        const session = await verifyRequestSession(req);
+        if (!session) {
+            return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
+        }
+
         await connectToDatabase();
         const body = await req.json();
         const { action, botToken, chatId, enabled, notifyMilestones, webhookUrl } = body;
@@ -82,6 +94,14 @@ export async function POST(req: NextRequest) {
             }
 
             await config.save();
+
+            // Record security audit event
+            await logSecurityEvent({
+                eventType: "TELEGRAM_CONFIG_UPDATED",
+                status: "SUCCESS",
+                request: req,
+                details: `Telegram bot configuration updated. Chat ID: ${config.chatId}, Enabled: ${config.enabled}, Notifications: ${config.notifyMilestones}`,
+            });
 
             return NextResponse.json({
                 success: true,
