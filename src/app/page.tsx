@@ -1,6 +1,7 @@
 import LogoViewer from "@/components/LogoViewer";
 import DashboardStats from "@/components/DashboardStats";
 import RecentActivity from "@/components/RecentActivity";
+import VehicleComplianceCard from "@/components/VehicleComplianceCard";
 import { Terminal, Radio } from "lucide-react";
 
 export default function Home() {
@@ -43,7 +44,12 @@ export default function Home() {
         <DashboardStats />
       </section>
 
-      {/* Row 2: 3D Stage & Recent Telemetry Logs */}
+      {/* Row 2: Vehicle Compliance & Legal Papers */}
+      <section className="w-full">
+        <VehicleComplianceCard />
+      </section>
+
+      {/* Row 3: 3D Stage & Recent Telemetry Logs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Left Column: 3D Emblem Visualizer (7 Cols) */}
         <section className="lg:col-span-7 h-[460px] w-full">
