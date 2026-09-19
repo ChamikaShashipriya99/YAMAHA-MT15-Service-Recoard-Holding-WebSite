@@ -26,6 +26,8 @@ import {
     Download,
     UploadCloud,
     Palette,
+    Send,
+    ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImportBackupModal from "@/components/ImportBackupModal";
@@ -36,7 +38,7 @@ interface SettingsModalProps {
     onClose: () => void;
 }
 
-type TabType = "database" | "credentials" | "2fa" | "audit" | "themes";
+type TabType = "database" | "credentials" | "2fa" | "audit" | "themes" | "telegram";
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("database");
@@ -235,13 +237,109 @@ Keep these single-use codes secure and offline.
         URL.revokeObjectURL(url);
     };
 
-    // Auto-ping when opening modal on database tab or audit tab
+    // --- Tab 6: Telegram Bot State ---
+    const [telegramStatus, setTelegramStatus] = useState<{
+        hasToken: boolean;
+        maskedToken: string;
+        chatId: string;
+        enabled: boolean;
+        notifyMilestones: boolean;
+        botUsername: string;
+        botName: string;
+        isValid: boolean;
+    } | null>(null);
+    const [botTokenInput, setBotTokenInput] = useState("");
+    const [chatIdInput, setChatIdInput] = useState("");
+    const [tgEnabled, setTgEnabled] = useState(true);
+    const [tgNotifyMilestones, setTgNotifyMilestones] = useState(true);
+    const [isSavingTg, setIsSavingTg] = useState(false);
+    const [isTestingTg, setIsTestingTg] = useState(false);
+    const [tgMessage, setTgMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+    const fetchTelegramStatus = async () => {
+        try {
+            const res = await fetch("/api/telegram/status");
+            const json = await res.json();
+            if (json.success && json.data) {
+                setTelegramStatus(json.data);
+                setChatIdInput(json.data.chatId || "");
+                setTgEnabled(json.data.enabled !== false);
+                setTgNotifyMilestones(json.data.notifyMilestones !== false);
+            }
+        } catch (err) {
+            console.warn("Failed to fetch telegram status:", err);
+        }
+    };
+
+    const handleSaveTelegram = async () => {
+        setIsSavingTg(true);
+        setTgMessage(null);
+        try {
+            const payload: any = {
+                action: "save",
+                chatId: chatIdInput,
+                enabled: tgEnabled,
+                notifyMilestones: tgNotifyMilestones,
+            };
+            if (botTokenInput) {
+                payload.botToken = botTokenInput;
+            }
+            const res = await fetch("/api/telegram/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                throw new Error(json.error || "Failed to save Telegram settings");
+            }
+            setTgMessage({ type: "success", text: json.message || "Telegram configuration saved!" });
+            setBotTokenInput("");
+            fetchTelegramStatus();
+        } catch (err: any) {
+            setTgMessage({ type: "error", text: err.message || "Error saving settings" });
+        } finally {
+            setIsSavingTg(false);
+        }
+    };
+
+    const handleTestTelegram = async () => {
+        setIsTestingTg(true);
+        setTgMessage(null);
+        try {
+            const payload: any = {
+                action: "test",
+                chatId: chatIdInput,
+            };
+            if (botTokenInput) {
+                payload.botToken = botTokenInput;
+            }
+            const res = await fetch("/api/telegram/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                throw new Error(json.error || "Failed to deliver test message");
+            }
+            setTgMessage({ type: "success", text: "Test message sent! Check your Telegram app." });
+        } catch (err: any) {
+            setTgMessage({ type: "error", text: err.message || "Failed to send test ping" });
+        } finally {
+            setIsTestingTg(false);
+        }
+    };
+
+    // Auto-ping when opening modal on database, audit, or telegram tab
     useEffect(() => {
         if (isOpen) {
             if (activeTab === "database") {
                 pingDatabase();
             } else if (activeTab === "audit") {
                 fetchAuditLogs();
+            } else if (activeTab === "telegram") {
+                fetchTelegramStatus();
             }
         }
     }, [isOpen, activeTab]);
@@ -363,6 +461,19 @@ Keep these single-use codes secure and offline.
                             >
                                 <Palette className="w-4 h-4" />
                                 <span>FACTORY THEMES</span>
+                            </button>
+
+                            <button
+                                onClick={() => setActiveTab("telegram")}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-3 text-xs font-mono font-semibold transition-all border-b-2 whitespace-nowrap",
+                                    activeTab === "telegram"
+                                        ? "border-cyan-400 text-cyan-300 bg-cyan-500/10"
+                                        : "border-transparent text-gray-400 hover:text-white"
+                                )}
+                            >
+                                <Send className="w-4 h-4 text-sky-400" />
+                                <span>TELEGRAM BOT</span>
                             </button>
                         </div>
 
@@ -930,6 +1041,156 @@ Keep these single-use codes secure and offline.
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 6: TELEGRAM BOT INTEGRATION */}
+                            {activeTab === "telegram" && (
+                                <div className="space-y-6">
+                                    {/* Connection Status Banner */}
+                                    <div className="p-4 rounded-xl border bg-black/40 border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn(
+                                                "p-2.5 rounded-xl border shrink-0",
+                                                telegramStatus?.isValid
+                                                    ? "bg-sky-500/15 border-sky-500/35 text-sky-400"
+                                                    : "bg-gray-500/15 border-gray-500/30 text-gray-400"
+                                            )}>
+                                                <Send className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-mono font-bold text-white tracking-wider">
+                                                        TELEGRAM BOT STATUS
+                                                    </span>
+                                                    {telegramStatus?.isValid ? (
+                                                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                            ONLINE // CONNECTED
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-gray-500/20 text-gray-400 border border-gray-500/40">
+                                                            NOT PAIRED
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] font-mono text-gray-400 mt-0.5">
+                                                    {telegramStatus?.isValid
+                                                        ? `@${telegramStatus.botUsername} (${telegramStatus.botName}) paired & synchronized`
+                                                        : "Pair a bot to receive 30d/15d/5d alerts & chat telemetry directly on your phone."}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {telegramStatus?.isValid && telegramStatus.botUsername && (
+                                            <a
+                                                href={`https://t.me/${telegramStatus.botUsername}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-sky-500 hover:bg-sky-400 text-black transition-all shadow-[0_0_12px_rgba(14,165,233,0.3)] shrink-0 self-start sm:self-auto"
+                                            >
+                                                <span>OPEN BOT</span>
+                                                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    {/* Quick 3-Step Setup Instructions Card */}
+                                    <div className="p-4 rounded-xl border border-sky-500/25 bg-sky-950/20 space-y-2 text-xs font-mono">
+                                        <div className="text-[11px] font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
+                                            <span>⚡ QUICK 2-MINUTE TELEGRAM BOT SETUP:</span>
+                                        </div>
+                                        <ol className="list-decimal list-inside space-y-1.5 text-gray-300 text-[11px] leading-relaxed">
+                                            <li>Open Telegram on your phone and search for <strong className="text-white">@BotFather</strong>.</li>
+                                            <li>Send <code className="text-cyan-300 bg-black/50 px-1 py-0.5 rounded">/newbot</code>, choose a name (e.g. <em>Yamaha MT-15</em>) and username (e.g. <em>MyMT15_Cockpit_bot</em>).</li>
+                                            <li>Copy the <strong className="text-white">HTTP API Token</strong> and paste it below.</li>
+                                            <li>Start a chat with your new bot and send <code className="text-cyan-300 bg-black/50 px-1 py-0.5 rounded">/start</code>. Then enter your personal <strong className="text-white">Chat ID</strong> (or text <strong className="text-white">@userinfobot</strong> to get your ID).</li>
+                                        </ol>
+                                    </div>
+
+                                    {/* Settings Form */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-mono font-semibold text-gray-300 mb-1.5">
+                                                TELEGRAM BOT TOKEN
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={botTokenInput}
+                                                onChange={(e) => setBotTokenInput(e.target.value)}
+                                                placeholder={telegramStatus?.maskedToken ? `Current: ${telegramStatus.maskedToken} (leave blank to keep)` : "e.g. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"}
+                                                className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-mono font-semibold text-gray-300 mb-1.5">
+                                                TELEGRAM CHAT ID
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={chatIdInput}
+                                                onChange={(e) => setChatIdInput(e.target.value)}
+                                                placeholder="e.g. 123456789 (your personal Telegram user ID)"
+                                                className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                            />
+                                        </div>
+
+                                        {/* Notification Checkbox */}
+                                        <div className="space-y-2 pt-1">
+                                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={tgNotifyMilestones}
+                                                    onChange={(e) => setTgNotifyMilestones(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-400 focus:ring-0 cursor-pointer"
+                                                />
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-mono font-bold text-white">Automated Milestone Push Alerts</span>
+                                                    <span className="text-[10px] font-mono text-gray-400">Send Telegram messages at 30 days, 15 days, and 5 days before document expiry.</span>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        {/* Feedback Message */}
+                                        {tgMessage && (
+                                            <div className={cn(
+                                                "p-3 rounded-xl border text-xs font-mono flex items-center gap-2",
+                                                tgMessage.type === "success"
+                                                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
+                                                    : "bg-rose-950/40 border-rose-500/40 text-rose-300"
+                                            )}>
+                                                {tgMessage.type === "success" ? (
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                                ) : (
+                                                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                                                )}
+                                                <span>{tgMessage.text}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Action Buttons */}
+                                        <div className="flex flex-wrap items-center gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveTelegram}
+                                                disabled={isSavingTg}
+                                                className="px-5 py-2.5 rounded-xl text-xs font-mono font-bold tracking-wider text-black bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_15px_rgba(0,240,255,0.3)] hover:shadow-[0_0_20px_rgba(0,240,255,0.5)] transition-all disabled:opacity-50"
+                                            >
+                                                {isSavingTg ? "SAVING..." : "SAVE TELEGRAM CONFIG"}
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleTestTelegram}
+                                                disabled={isTestingTg}
+                                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-mono font-bold tracking-wider text-sky-300 bg-sky-500/10 border border-sky-500/30 hover:bg-sky-500/20 transition-all disabled:opacity-50"
+                                            >
+                                                <Send className="w-3.5 h-3.5" />
+                                                <span>{isTestingTg ? "SENDING..." : "SEND TEST TELEGRAM PING"}</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

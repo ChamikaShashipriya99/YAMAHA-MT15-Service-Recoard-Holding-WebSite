@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import VehicleCompliance from "@/models/VehicleCompliance";
 import { verifyRequestSession } from "@/lib/auth";
 import { logSecurityEvent } from "@/lib/audit";
+import { dispatchTelegramComplianceAlerts } from "@/lib/telegramBot";
 
 function calculateDocumentStatus(expiryDateStr: string) {
     if (!expiryDateStr) {
@@ -89,6 +90,11 @@ export async function GET() {
             });
         }
 
+        // Asynchronously check and dispatch Telegram compliance alerts
+        dispatchTelegramComplianceAlerts().catch((err) => {
+            console.warn("Telegram compliance alert dispatch error:", err);
+        });
+
         return NextResponse.json({
             success: true,
             data: {
@@ -162,6 +168,11 @@ export async function PUT(request: NextRequest) {
         const insuranceStatus = calculateDocumentStatus(compliance.insurance.expiryDate);
         const revenueStatus = calculateDocumentStatus(compliance.revenueLicense.expiryDate);
         const emissionStatus = calculateDocumentStatus(compliance.emissionTest.expiryDate);
+
+        // Asynchronously check and dispatch Telegram compliance alerts
+        dispatchTelegramComplianceAlerts().catch((err) => {
+            console.warn("Telegram compliance alert dispatch error on update:", err);
+        });
 
         return NextResponse.json({
             success: true,
